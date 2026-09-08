@@ -1,0 +1,66 @@
+name: Build and Package Android APK
+
+on:
+  push:
+    branches: [ "**" ]
+  pull_request:
+    branches: [ "**" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build Debug APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'gradle'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.3.1'
+
+      - name: Accept Android SDK Licenses
+        run: |
+          yes | sdkmanager --licenses || true
+
+      - name: Configure Keystore and Secrets Environment
+        run: |
+          # 1. Restore debug keystore (required by app/build.gradle.kts debugConfig)
+          if [ ! -f debug.keystore ] || [ ! -s debug.keystore ]; then
+            if [ -f debug.keystore.base64 ]; then
+              base64 -d debug.keystore.base64 > debug.keystore || base64 --decode debug.keystore.base64 > debug.keystore || true
+            fi
+            if [ ! -s debug.keystore ]; then
+              keytool -genkey -v -keystore debug.keystore -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=Android Debug,O=Android,C=US"
+            fi
+          fi
+
+          # 2. Ensure .env exists for Secrets Gradle Plugin
+          if [ -f .env.example ] && [ ! -f .env ]; then
+            cp .env.example .env
+          elif [ ! -f .env ]; then
+            touch .env
+          fi
+
+          # 3. Ensure Gradle wrapper is executable
+          chmod +x gradlew || true
+
+      - name: Build Debug APK with Gradle
+        run: ./gradlew :app:assembleDebug --stacktrace --no-daemon
+
+      - name: Upload Debug APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Office-Mess-Manager-APK
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
