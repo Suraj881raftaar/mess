@@ -7,6 +7,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Assessment
@@ -15,6 +16,7 @@ import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.RestaurantMenu
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
@@ -27,6 +29,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.data.database.MessDatabase
 import com.example.data.repository.AttendanceRepository
 import com.example.data.repository.EmployeeRepository
@@ -47,7 +53,7 @@ import com.example.ui.reports.ReportsViewModel
 import com.example.ui.theme.MyApplicationTheme
 
 enum class MainDestination(val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector) {
-  DASHBOARD("Dashboard", Icons.Default.Dashboard),
+  DASHBOARD("Home", Icons.Default.Dashboard),
   EMPLOYEES("Staff", Icons.Default.Badge),
   ATTENDANCE("Meals", Icons.Default.Restaurant),
   MENU("Menu", Icons.Default.RestaurantMenu),
@@ -145,11 +151,31 @@ fun MainApp(
     bottomBar = {
       NavigationBar(modifier = Modifier.testTag("main_bottom_nav")) {
         MainDestination.values().forEach { destination ->
+          val isSelected = currentDestination == destination
           NavigationBarItem(
-            selected = currentDestination == destination,
+            selected = isSelected,
             onClick = { currentDestination = destination },
-            icon = { Icon(destination.icon, contentDescription = destination.label) },
-            label = { Text(destination.label) },
+            icon = {
+              Icon(
+                destination.icon,
+                contentDescription = destination.label,
+                modifier = Modifier.size(22.dp)
+              )
+            },
+            label = {
+              Text(
+                text = destination.label,
+                style = MaterialTheme.typography.labelSmall.copy(
+                  fontSize = 11.sp,
+                  fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                  letterSpacing = (-0.2).sp
+                ),
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis
+              )
+            },
+            alwaysShowLabel = true,
             modifier = Modifier.testTag("nav_item_${destination.name.lowercase()}")
           )
         }
