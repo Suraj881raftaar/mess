@@ -2,14 +2,15 @@ name: Build Android APK
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ "**" ]
   pull_request:
-    branches: [ main, master ]
+    branches: [ "**" ]
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
     - name: Checkout repository
@@ -20,24 +21,41 @@ jobs:
       with:
         java-version: '21'
         distribution: 'temurin'
+        cache: 'gradle'
 
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v4
       with:
         gradle-version: '9.3.1'
 
-    - name: Prepare keystore and environment
+    - name: Setup Android SDK licenses
       run: |
-        if [ -f debug.keystore.base64 ] && [ ! -f debug.keystore ]; then
-          base64 -d debug.keystore.base64 > debug.keystore
+        yes | sdkmanager --licenses || true
+
+    - name: Restore Keystore and Environment Config
+      run: |
+        # 1. Restore debug keystore (from base64 or generate a standard debug keystore)
+        if [ ! -f debug.keystore ] || [ ! -s debug.keystore ]; then
+          if [ -f debug.keystore.base64 ]; then
+            base64 -d debug.keystore.base64 > debug.keystore || base64 --decode debug.keystore.base64 > debug.keystore || true
+          fi
+          if [ ! -s debug.keystore ]; then
+            keytool -genkey -v -keystore debug.keystore -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=Android Debug,O=Android,C=US"
+          fi
         fi
+
+        # 2. Ensure .env exists for Secrets Gradle Plugin
         if [ -f .env.example ] && [ ! -f .env ]; then
           cp .env.example .env
+        elif [ ! -f .env ]; then
+          touch .env
         fi
+
+        # 3. Ensure gradlew is executable
         chmod +x gradlew || true
 
     - name: Build Debug APK
-      run: ./gradlew :app:assembleDebug --stacktrace
+      run: ./gradlew :app:assembleDebug --stacktrace --no-daemon
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
