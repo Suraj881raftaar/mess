@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Center safe zone is between 21 and 87 -->
+    <!-- Handle Knob -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,34m-4.5,0a4.5,4.5 0,1 1,9 0a4.5,4.5 0,1 1,-9 0" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M51.5,37h5v3h-5z" />
+    <!-- Cloche Dome -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,40 C42,40 32,50 31,62 L77,62 C76,50 66,40 54,40 Z" />
+    <!-- Tray Rim / Base -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M27,65 C27,63.9 27.9,63 29,63 L79,63 C80.1,63 81,63.9 81,65 L81,67 C81,68.1 80.1,69 79,69 L29,69 C27.9,69 27,68.1 27,67 Z" />
+    <!-- Tray Bottom Accent Feet -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M35,69 L73,69 L70,72 L38,72 Z" />
+</vector>

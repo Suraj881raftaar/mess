@@ -1,0 +1,6 @@
+{
+  "name": "Mess Manager",
+  "description": "Offline-first office mess manager for tracking employee meal attendance, daily menus, mess expenses, and monthly shared billing.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
