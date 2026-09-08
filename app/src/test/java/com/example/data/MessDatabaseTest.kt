@@ -6,26 +6,36 @@ import androidx.test.core.app.ApplicationProvider
 import com.example.data.dao.EmployeeDao
 import com.example.data.dao.ExpenseDao
 import com.example.data.dao.MealAttendanceDao
+import com.example.data.dao.MealFeedbackDao
 import com.example.data.dao.MenuDao
 import com.example.data.dao.MenuTemplateDao
 import com.example.data.dao.MessSettingDao
+import com.example.data.dao.PantryDao
 import com.example.data.dao.PaymentDao
 import com.example.data.database.MessDatabase
 import com.example.data.entity.Employee
 import com.example.data.entity.Expense
 import com.example.data.entity.MealAttendance
+import com.example.data.entity.MealFeedback
 import com.example.data.entity.Menu
 import com.example.data.entity.MenuTemplate
+import com.example.data.entity.PantryItem
+import com.example.data.entity.PantryUnit
 import com.example.data.entity.Payment
+import com.example.data.model.DietaryPreference
 import com.example.data.model.ExpenseCategory
 import com.example.data.model.MealType
 import com.example.data.repository.AttendanceRepository
 import com.example.data.repository.EmployeeRepository
 import com.example.data.repository.ExpenseRepository
+import com.example.data.repository.MealFeedbackRepository
 import com.example.data.repository.MenuRepository
+import com.example.data.repository.PantryRepository
 import com.example.data.repository.PaymentRepository
 import com.example.data.repository.SettingsRepository
 import com.example.util.CurrencyUtils
+import com.example.util.RecipeCalculator
+import com.example.util.UpiUtils
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -60,6 +70,11 @@ class MessDatabaseTest {
   private lateinit var paymentRepo: PaymentRepository
   private lateinit var settingsRepo: SettingsRepository
 
+  private lateinit var pantryDao: PantryDao
+  private lateinit var mealFeedbackDao: MealFeedbackDao
+  private lateinit var pantryRepo: PantryRepository
+  private lateinit var feedbackRepo: MealFeedbackRepository
+
   @Before
   fun setup() {
     val context = ApplicationProvider.getApplicationContext<Context>()
@@ -71,6 +86,8 @@ class MessDatabaseTest {
     paymentDao = db.paymentDao()
     menuTemplateDao = db.menuTemplateDao()
     messSettingDao = db.messSettingDao()
+    pantryDao = db.pantryDao()
+    mealFeedbackDao = db.mealFeedbackDao()
 
     employeeRepo = EmployeeRepository(employeeDao)
     attendanceRepo = AttendanceRepository(attendanceDao)
@@ -78,6 +95,8 @@ class MessDatabaseTest {
     expenseRepo = ExpenseRepository(expenseDao)
     paymentRepo = PaymentRepository(paymentDao)
     settingsRepo = SettingsRepository(messSettingDao)
+    pantryRepo = PantryRepository(pantryDao, expenseDao)
+    feedbackRepo = MealFeedbackRepository(mealFeedbackDao)
   }
 
   @After
@@ -374,5 +393,174 @@ class MessDatabaseTest {
     // Edge case: 0 total meals does not divide by zero
     val zeroCost = CurrencyUtils.calculateCostPerMealRupees(totalExpensePaise, 0)
     assertEquals(0.0, zeroCost, 0.0001)
+  }
+
+  @Test
+  fun testDietaryPreferencePersistence() = runBlocking {
+    val id = employeeDao.insert(
+      Employee(
+        employeeCode = "EMP_VEG",
+        name = "Kavita Patel",
+        department = "Design",
+        dietaryPreference = DietaryPreference.JAIN
+      )
+    )
+    val fetched = employeeDao.getEmployeeByIdOnce(id)
+    assertNotNull(fetched)
+    assertEquals(DietaryPreference.JAIN, fetched!!.dietaryPreference)
+    assertEquals("Jain", fetched.dietaryPreference.displayName)
+    assertEquals("🌿 Jain", fetched.dietaryPreference.label)
+  }
+
+  @Test
+  fun testPantryOperationsAndLowStock() = runBlocking {
+    // Add Rice (50 kg, min 10 kg)
+    val riceResult = pantryRepo.addPantryItem(
+      itemName = "Basmati Rice",
+      category = ExpenseCategory.GROCERIES,
+      currentQuantity = 50.0,
+      minThreshold = 10.0,
+      unit = PantryUnit.KG,
+      estimatedPricePaise = 6000L
+    )
+    assertTrue(riceResult.isSuccess)
+    val riceId = riceResult.getOrThrow()
+
+    // Add Mustard Oil (2 Litres, min 5 Litres -> Low Stock!)
+    val oilResult = pantryRepo.addPantryItem(
+      itemName = "Mustard Oil",
+      category = ExpenseCategory.GROCERIES,
+      currentQuantity = 2.0,
+      minThreshold = 5.0,
+      unit = PantryUnit.LITRE,
+      estimatedPricePaise = 15000L,
+      isNeededOnShoppingList = true
+    )
+    assertTrue(oilResult.isSuccess)
+
+    // Verify low stock query
+    val lowStockCount = pantryRepo.lowStockCount.first()
+    assertEquals(1, lowStockCount)
+
+    // Verify shopping list generated items
+    val shoppingList = pantryRepo.shoppingList.first()
+    assertEquals(1, shoppingList.size)
+    assertEquals("Mustard Oil", shoppingList[0].itemName)
+
+    // Update rice quantity to 5 kg (< 10.0 minimum)
+    val reduceRes = pantryRepo.updateStock(riceId, 5.0)
+    assertTrue(reduceRes.isSuccess)
+
+    val updatedLowStockCount = pantryRepo.lowStockCount.first()
+    assertEquals(2, updatedLowStockCount)
+  }
+
+  @Test
+  fun testPantryRestockAutoExpenseCreation() = runBlocking {
+    val itemRes = pantryRepo.addPantryItem(
+      itemName = "Toor Dal",
+      category = ExpenseCategory.GROCERIES,
+      currentQuantity = 5.0,
+      minThreshold = 10.0,
+      unit = PantryUnit.KG,
+      estimatedPricePaise = 12000L // ₹120/kg
+    )
+    assertTrue(itemRes.isSuccess)
+    val itemId = itemRes.getOrThrow()
+
+    // Restock 15 kg with expense creation at ₹120/kg = ₹1,800.00 (180,000 paise)
+    val purchaseRes = pantryRepo.markItemPurchased(
+      itemId = itemId,
+      purchasedQuantity = 15.0,
+      actualCostPaise = 180000L,
+      vendor = "Wholesale Grocery Market",
+      purchaseDate = "2026-09-08"
+    )
+    assertTrue(purchaseRes.isSuccess)
+
+    // Check item quantity is now 20 kg
+    val item = pantryRepo.allPantryItems.first().find { it.id == itemId }
+    assertNotNull(item)
+    assertEquals(20.0, item!!.currentQuantity, 0.001)
+
+    // Check that an expense entry was automatically created in expense table
+    val expenses = expenseDao.getExpensesForMonth("2026-09").first()
+    val restockExpense = expenses.find { it.description.contains("Toor Dal") }
+    assertNotNull(restockExpense)
+    assertEquals(180000L, restockExpense!!.amountPaise)
+    assertEquals("Wholesale Grocery Market", restockExpense.vendor)
+  }
+
+  @Test
+  fun testMealFeedbackOperations() = runBlocking {
+    val empId = employeeDao.insert(
+      Employee(employeeCode = "EMP_FD1", name = "Aman Gupta", department = "Sales")
+    )
+
+    // Submit ratings
+    val f1 = feedbackRepo.submitFeedback(
+      date = "2026-09-08",
+      mealType = MealType.LUNCH,
+      employeeId = empId,
+      employeeName = "Aman Gupta",
+      rating = 5,
+      comment = "Excellent Paneer Butter Masala!"
+    )
+    assertTrue(f1.isSuccess)
+
+    val empId2 = employeeDao.insert(
+      Employee(employeeCode = "EMP_FD2", name = "Priya Singh", department = "Design")
+    )
+    val f2 = feedbackRepo.submitFeedback(
+      date = "2026-09-08",
+      mealType = MealType.LUNCH,
+      employeeId = empId2,
+      employeeName = "Priya Singh",
+      rating = 3,
+      comment = "Rotis were slightly cold."
+    )
+    assertTrue(f2.isSuccess)
+
+    // Check stats
+    val avg = feedbackRepo.getAverageRatingForDateAndMeal("2026-09-08", MealType.LUNCH).first()
+    assertEquals(4.0, avg ?: 0.0, 0.001)
+
+    val list = feedbackRepo.getFeedbacksForDateAndMeal("2026-09-08", MealType.LUNCH).first()
+    assertEquals(2, list.size)
+  }
+
+  @Test
+  fun testRecipeCalculator() {
+    val paneerDish = RecipeCalculator.dishes.find { it.id == "paneer_butter_masala" }
+    assertNotNull(paneerDish)
+    val scaled50 = RecipeCalculator.calculateIngredients(paneerDish!!, headcount = 50)
+    assertEquals(6, scaled50.size)
+
+    val paneer = scaled50.find { it.first.name == "Fresh Paneer" }
+    assertNotNull(paneer)
+    // 50 people * 0.12 kg = 6.0 kg
+    assertEquals(6.0, paneer!!.second, 0.001)
+    assertEquals("kg", paneer.first.unit)
+
+    val biryaniDish = RecipeCalculator.dishes.find { it.id == "veg_biryani" }
+    assertNotNull(biryaniDish)
+    val scaled100 = RecipeCalculator.calculateIngredients(biryaniDish!!, headcount = 100)
+    val rice = scaled100.find { it.first.name == "Basmati Rice" }
+    assertNotNull(rice)
+    // 100 people * 0.10 kg = 10.0 kg
+    assertEquals(10.0, rice!!.second, 0.001)
+  }
+
+  @Test
+  fun testUpiUtilsUriGeneration() {
+    val uri = UpiUtils.generateUpiUri(
+      upiId = "officemess@upi",
+      payeeName = "Office Mess",
+      amountRupees = 840.50,
+      note = "Mess Bill Sep 2026"
+    )
+    assertTrue(uri.startsWith("upi://pay?"))
+    assertTrue(uri.contains("pa=officemess@upi") || uri.contains("pa=officemess%40upi"))
+    assertTrue(uri.contains("am=840.50"))
   }
 }

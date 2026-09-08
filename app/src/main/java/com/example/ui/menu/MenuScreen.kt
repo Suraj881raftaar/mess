@@ -1,6 +1,7 @@
 package com.example.ui.menu
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -31,8 +32,11 @@ import androidx.compose.material.icons.filled.DinnerDining
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FreeBreakfast
 import androidx.compose.material.icons.filled.LunchDining
+import androidx.compose.material.icons.filled.RateReview
 import androidx.compose.material.icons.filled.RestaurantMenu
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Today
+import androidx.compose.ui.draw.clip
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -79,6 +83,7 @@ import com.example.data.model.MealType
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import com.example.ui.feedback.MealFeedbackDialog
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -90,6 +95,7 @@ fun MenuScreen(
   val dailyState by viewModel.dailyMenuState.collectAsStateWithLifecycle()
   val weeklyState by viewModel.weeklyMenuState.collectAsStateWithLifecycle()
   val templates by viewModel.templates.collectAsStateWithLifecycle()
+  val feedbacks by viewModel.feedbacksForSelectedDate.collectAsStateWithLifecycle()
   val editMealDialogState by viewModel.editMealDialogState.collectAsStateWithLifecycle()
   val copyDayDialogState by viewModel.copyDayDialogState.collectAsStateWithLifecycle()
   val userMessage by viewModel.userMessage.collectAsStateWithLifecycle()
@@ -99,6 +105,7 @@ fun MenuScreen(
   var showTemplatesDialog by remember { mutableStateOf(false) }
   var showSaveTemplateDialog by remember { mutableStateOf(false) }
   var showCopyWeekDialog by remember { mutableStateOf(false) }
+  var feedbackMealTarget by remember { mutableStateOf<Pair<MealType, String?>?>(null) }
 
   LaunchedEffect(userMessage) {
     userMessage?.let {
@@ -204,11 +211,13 @@ fun MenuScreen(
         MenuMode.DAILY -> {
           DailyMenuView(
             state = dailyState,
+            feedbacks = feedbacks,
             onPreviousDay = { viewModel.selectPreviousDay() },
             onNextDay = { viewModel.selectNextDay() },
             onToday = { viewModel.selectToday() },
             onSelectDate = { viewModel.setDate(it) },
             onSaveAsTemplate = { showSaveTemplateDialog = true },
+            onRateMeal = { mealType, dish -> feedbackMealTarget = Pair(mealType, dish) },
             onEditMeal = { mealType, currentText ->
               viewModel.openEditMealDialog(dailyState.date, mealType, currentText)
             }
@@ -225,6 +234,20 @@ fun MenuScreen(
         }
       }
     }
+  }
+
+  // Meal Rating & Feedback Dialog
+  feedbackMealTarget?.let { (mealType, dish) ->
+    MealFeedbackDialog(
+      mealType = mealType,
+      date = dailyState.date,
+      dishName = dish,
+      onDismiss = { feedbackMealTarget = null },
+      onSubmit = { rating, comment, employeeName ->
+        viewModel.submitMealRating(mealType, rating, comment, employeeName)
+        feedbackMealTarget = null
+      }
+    )
   }
 
   // Edit Meal Dialog
@@ -407,11 +430,13 @@ fun MenuScreen(
 @Composable
 private fun DailyMenuView(
   state: DailyMenuState,
+  feedbacks: List<com.example.data.entity.MealFeedback> = emptyList(),
   onPreviousDay: () -> Unit,
   onNextDay: () -> Unit,
   onToday: () -> Unit,
   onSelectDate: (String) -> Unit,
   onSaveAsTemplate: () -> Unit = {},
+  onRateMeal: (MealType, String?) -> Unit = { _, _ -> },
   onEditMeal: (MealType, String) -> Unit
 ) {
   var showDatePicker by remember { mutableStateOf(false) }
@@ -525,26 +550,35 @@ private fun DailyMenuView(
         verticalArrangement = Arrangement.spacedBy(12.dp)
       ) {
         item {
+          val mealFeedbacks = feedbacks.filter { it.mealType == MealType.BREAKFAST }
           MealCard(
             mealType = MealType.BREAKFAST,
             menu = state.breakfast,
+            feedbacks = mealFeedbacks,
             icon = Icons.Default.FreeBreakfast,
+            onRate = { onRateMeal(MealType.BREAKFAST, state.breakfast?.description) },
             onEdit = { onEditMeal(MealType.BREAKFAST, state.breakfast?.description ?: "") }
           )
         }
         item {
+          val mealFeedbacks = feedbacks.filter { it.mealType == MealType.LUNCH }
           MealCard(
             mealType = MealType.LUNCH,
             menu = state.lunch,
+            feedbacks = mealFeedbacks,
             icon = Icons.Default.LunchDining,
+            onRate = { onRateMeal(MealType.LUNCH, state.lunch?.description) },
             onEdit = { onEditMeal(MealType.LUNCH, state.lunch?.description ?: "") }
           )
         }
         item {
+          val mealFeedbacks = feedbacks.filter { it.mealType == MealType.DINNER }
           MealCard(
             mealType = MealType.DINNER,
             menu = state.dinner,
+            feedbacks = mealFeedbacks,
             icon = Icons.Default.DinnerDining,
+            onRate = { onRateMeal(MealType.DINNER, state.dinner?.description) },
             onEdit = { onEditMeal(MealType.DINNER, state.dinner?.description ?: "") }
           )
         }
@@ -568,11 +602,14 @@ private fun DailyMenuView(
 private fun MealCard(
   mealType: MealType,
   menu: Menu?,
+  feedbacks: List<com.example.data.entity.MealFeedback> = emptyList(),
   icon: ImageVector,
+  onRate: () -> Unit = {},
   onEdit: () -> Unit,
   modifier: Modifier = Modifier
 ) {
   val hasMenu = menu != null && menu.description.isNotBlank()
+  val avgRating = if (feedbacks.isNotEmpty()) feedbacks.map { it.rating }.average() else null
 
   Card(
     modifier = modifier
@@ -612,17 +649,54 @@ private fun MealCard(
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold
           )
+
+          if (avgRating != null) {
+            Spacer(modifier = Modifier.width(8.dp))
+            Row(
+              verticalAlignment = Alignment.CenterVertically,
+              modifier = Modifier
+                .clip(RoundedCornerShape(6.dp))
+                .background(androidx.compose.ui.graphics.Color(0xFFFFF8E1))
+                .padding(horizontal = 6.dp, vertical = 2.dp)
+            ) {
+              Text(
+                "★ ${String.format(java.util.Locale.US, "%.1f", avgRating)}",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = androidx.compose.ui.graphics.Color(0xFFF57F17)
+              )
+              Text(
+                " (${feedbacks.size})",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+              )
+            }
+          }
         }
 
-        IconButton(
-          onClick = onEdit,
-          modifier = Modifier.testTag("btn_edit_${mealType.name.lowercase()}")
-        ) {
-          Icon(
-            imageVector = Icons.Default.Edit,
-            contentDescription = "Edit ${mealType.displayName}",
-            tint = MaterialTheme.colorScheme.primary
-          )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+          if (hasMenu) {
+            TextButton(
+              onClick = onRate,
+              contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+              modifier = Modifier.height(32.dp)
+            ) {
+              Icon(Icons.Default.Star, contentDescription = null, modifier = Modifier.size(16.dp), tint = androidx.compose.ui.graphics.Color(0xFFFFB300))
+              Spacer(modifier = Modifier.width(4.dp))
+              Text("Rate", style = MaterialTheme.typography.labelMedium)
+            }
+          }
+
+          IconButton(
+            onClick = onEdit,
+            modifier = Modifier.testTag("btn_edit_${mealType.name.lowercase()}")
+          ) {
+            Icon(
+              imageVector = Icons.Default.Edit,
+              contentDescription = "Edit ${mealType.displayName}",
+              tint = MaterialTheme.colorScheme.primary
+            )
+          }
         }
       }
 
@@ -635,6 +709,26 @@ private fun MealCard(
           color = MaterialTheme.colorScheme.onSurface,
           modifier = Modifier.testTag("menu_desc_${mealType.name.lowercase()}")
         )
+
+        // Show recent review comments if available
+        if (feedbacks.any { !it.comment.isNullOrBlank() }) {
+          Spacer(modifier = Modifier.height(8.dp))
+          val latestComment = feedbacks.firstOrNull { !it.comment.isNullOrBlank() }
+          latestComment?.let { fb ->
+            Card(
+              colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f)),
+              shape = RoundedCornerShape(8.dp),
+              modifier = Modifier.fillMaxWidth()
+            ) {
+              Row(modifier = Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("💬 \"${fb.comment}\"", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                fb.employeeName?.let { name ->
+                  Text(" — $name", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                }
+              }
+            }
+          }
+        }
       } else {
         Text(
           text = "No menu planned yet. Tap edit to enter items.",

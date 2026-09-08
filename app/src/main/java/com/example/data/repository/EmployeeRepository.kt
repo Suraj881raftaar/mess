@@ -2,6 +2,7 @@ package com.example.data.repository
 
 import com.example.data.dao.EmployeeDao
 import com.example.data.entity.Employee
+import com.example.data.model.DietaryPreference
 import kotlinx.coroutines.flow.Flow
 
 class EmployeeRepository(private val employeeDao: EmployeeDao) {
@@ -24,7 +25,8 @@ class EmployeeRepository(private val employeeDao: EmployeeDao) {
     code: String,
     name: String,
     department: String,
-    phone: String? = null
+    phone: String? = null,
+    dietaryPreference: DietaryPreference = DietaryPreference.REGULAR_VEG
   ): Result<Long> {
     val trimmedCode = code.trim()
     val trimmedName = name.trim()
@@ -50,6 +52,7 @@ class EmployeeRepository(private val employeeDao: EmployeeDao) {
       name = trimmedName,
       department = trimmedDept,
       phone = phone?.trim()?.ifBlank { null },
+      dietaryPreference = dietaryPreference,
       isActive = true
     )
     val id = employeeDao.insert(employee)

@@ -3,6 +3,7 @@ package com.example.data.entity
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import com.example.data.model.DietaryPreference
 
 @Entity(
   tableName = "employees",
@@ -17,6 +18,7 @@ data class Employee(
   val name: String,
   val department: String,
   val phone: String? = null,
+  val dietaryPreference: DietaryPreference = DietaryPreference.REGULAR_VEG,
   val isActive: Boolean = true,
   val createdAt: Long = System.currentTimeMillis()
 )

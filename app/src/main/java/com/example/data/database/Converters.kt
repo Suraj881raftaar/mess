@@ -24,4 +24,24 @@ class Converters {
   fun toExpenseCategory(name: String?): ExpenseCategory? {
     return name?.let { ExpenseCategory.valueOf(it) }
   }
+
+  @TypeConverter
+  fun fromPantryUnit(unit: com.example.data.entity.PantryUnit?): String? {
+    return unit?.name
+  }
+
+  @TypeConverter
+  fun toPantryUnit(name: String?): com.example.data.entity.PantryUnit? {
+    return name?.let { runCatching { com.example.data.entity.PantryUnit.valueOf(it) }.getOrNull() } ?: com.example.data.entity.PantryUnit.KG
+  }
+
+  @TypeConverter
+  fun fromDietaryPreference(pref: com.example.data.model.DietaryPreference?): String? {
+    return pref?.name
+  }
+
+  @TypeConverter
+  fun toDietaryPreference(name: String?): com.example.data.model.DietaryPreference? {
+    return com.example.data.model.DietaryPreference.fromString(name)
+  }
 }

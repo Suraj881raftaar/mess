@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.data.entity.Employee
+import com.example.data.model.DietaryPreference
 import com.example.data.repository.EmployeeRepository
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,6 +26,7 @@ data class EmployeeFormState(
   val name: String = "",
   val department: String = "",
   val phone: String = "",
+  val dietaryPreference: DietaryPreference = DietaryPreference.VEG,
   val codeError: String? = null,
   val nameError: String? = null,
   val departmentError: String? = null,
@@ -106,7 +108,8 @@ class EmployeesViewModel(
       employeeCode = employee.employeeCode,
       name = employee.name,
       department = employee.department,
-      phone = employee.phone ?: ""
+      phone = employee.phone ?: "",
+      dietaryPreference = employee.dietaryPreference
     )
     _isAddDialogOpen.value = true
   }
@@ -133,12 +136,17 @@ class EmployeesViewModel(
     _formState.value = _formState.value.copy(phone = phone)
   }
 
+  fun onDietaryPreferenceChange(preference: DietaryPreference) {
+    _formState.value = _formState.value.copy(dietaryPreference = preference)
+  }
+
   suspend fun submitFormSync(): Boolean {
     val current = _formState.value
     val code = current.employeeCode.trim()
     val name = current.name.trim()
     val dept = current.department.trim()
     val phone = current.phone.trim().ifBlank { null }
+    val diet = current.dietaryPreference
 
     var hasError = false
     var codeErr: String? = null
@@ -172,7 +180,7 @@ class EmployeesViewModel(
     val editTarget = _employeeToEdit.value
     return if (editTarget == null) {
       // Add new
-      val result = employeeRepository.addEmployee(code, name, dept, phone)
+      val result = employeeRepository.addEmployee(code, name, dept, phone, diet)
       if (result.isSuccess) {
         _isAddDialogOpen.value = false
         _formState.value = EmployeeFormState()
@@ -191,7 +199,8 @@ class EmployeesViewModel(
         employeeCode = code,
         name = name,
         department = dept,
-        phone = phone
+        phone = phone,
+        dietaryPreference = diet
       )
       val result = employeeRepository.updateEmployee(updated)
       if (result.isSuccess) {

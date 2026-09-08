@@ -10,16 +10,20 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import com.example.data.dao.EmployeeDao
 import com.example.data.dao.ExpenseDao
 import com.example.data.dao.MealAttendanceDao
+import com.example.data.dao.MealFeedbackDao
 import com.example.data.dao.MenuDao
 import com.example.data.dao.MenuTemplateDao
 import com.example.data.dao.MessSettingDao
+import com.example.data.dao.PantryDao
 import com.example.data.dao.PaymentDao
 import com.example.data.entity.Employee
 import com.example.data.entity.Expense
 import com.example.data.entity.MealAttendance
+import com.example.data.entity.MealFeedback
 import com.example.data.entity.Menu
 import com.example.data.entity.MenuTemplate
 import com.example.data.entity.MessSetting
+import com.example.data.entity.PantryItem
 import com.example.data.entity.Payment
 
 @Database(
@@ -30,9 +34,11 @@ import com.example.data.entity.Payment
     Expense::class,
     Payment::class,
     MenuTemplate::class,
-    MessSetting::class
+    MessSetting::class,
+    MealFeedback::class,
+    PantryItem::class
   ],
-  version = 2,
+  version = 3,
   exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -44,6 +50,8 @@ abstract class MessDatabase : RoomDatabase() {
   abstract fun paymentDao(): PaymentDao
   abstract fun menuTemplateDao(): MenuTemplateDao
   abstract fun messSettingDao(): MessSettingDao
+  abstract fun mealFeedbackDao(): MealFeedbackDao
+  abstract fun pantryDao(): PantryDao
 
   companion object {
     @Volatile
@@ -102,6 +110,53 @@ abstract class MessDatabase : RoomDatabase() {
       }
     }
 
+    val MIGRATION_2_3 = object : Migration(2, 3) {
+      override fun migrate(db: SupportSQLiteDatabase) {
+        // 1. Add dietaryPreference to employees table
+        db.execSQL("ALTER TABLE employees ADD COLUMN dietaryPreference TEXT NOT NULL DEFAULT 'REGULAR_VEG'")
+
+        // 2. Create meal_feedbacks table
+        db.execSQL(
+          """
+          CREATE TABLE IF NOT EXISTS meal_feedbacks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+            date TEXT NOT NULL,
+            mealType TEXT NOT NULL,
+            rating INTEGER NOT NULL,
+            comment TEXT,
+            employeeName TEXT,
+            employeeId INTEGER,
+            createdAt INTEGER NOT NULL
+          )
+          """.trimIndent()
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_meal_feedbacks_date ON meal_feedbacks(date)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_meal_feedbacks_mealType ON meal_feedbacks(mealType)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_meal_feedbacks_employeeId ON meal_feedbacks(employeeId)")
+
+        // 3. Create pantry_items table
+        db.execSQL(
+          """
+          CREATE TABLE IF NOT EXISTS pantry_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+            itemName TEXT NOT NULL,
+            category TEXT NOT NULL,
+            currentQuantity REAL NOT NULL,
+            unit TEXT NOT NULL,
+            minThreshold REAL NOT NULL,
+            estimatedPricePaise INTEGER NOT NULL,
+            isNeededOnShoppingList INTEGER NOT NULL,
+            notes TEXT,
+            lastPurchasedDate TEXT,
+            updatedAt INTEGER NOT NULL
+          )
+          """.trimIndent()
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_pantry_items_itemName ON pantry_items(itemName)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_pantry_items_category ON pantry_items(category)")
+      }
+    }
+
     fun getDatabase(context: Context): MessDatabase {
       return INSTANCE ?: synchronized(this) {
         val instance = Room.databaseBuilder(
@@ -109,7 +164,7 @@ abstract class MessDatabase : RoomDatabase() {
           MessDatabase::class.java,
           DATABASE_NAME
         )
-          .addMigrations(MIGRATION_1_2)
+          .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
           .fallbackToDestructiveMigrationOnDowngrade()
           .build()
         INSTANCE = instance

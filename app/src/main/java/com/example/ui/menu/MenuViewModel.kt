@@ -3,9 +3,11 @@ package com.example.ui.menu
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.example.data.entity.MealFeedback
 import com.example.data.entity.Menu
 import com.example.data.entity.MenuTemplate
 import com.example.data.model.MealType
+import com.example.data.repository.MealFeedbackRepository
 import com.example.data.repository.MenuRepository
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -17,12 +19,14 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class MenuViewModel(
-  private val menuRepository: MenuRepository
+  private val menuRepository: MenuRepository,
+  private val feedbackRepository: MealFeedbackRepository? = null
 ) : ViewModel() {
 
   companion object {
@@ -304,6 +308,43 @@ class MenuViewModel(
     }
   }
 
+  @OptIn(ExperimentalCoroutinesApi::class)
+  val feedbacksForSelectedDate: StateFlow<List<MealFeedback>> = _selectedDate
+    .flatMapLatest { date ->
+      feedbackRepository?.getFeedbacksForDate(date) ?: flowOf(emptyList())
+    }
+    .stateIn(
+      scope = viewModelScope,
+      started = SharingStarted.WhileSubscribed(5000),
+      initialValue = emptyList()
+    )
+
+  fun submitMealRating(
+    mealType: MealType,
+    rating: Int,
+    comment: String?,
+    employeeName: String?
+  ) {
+    viewModelScope.launch {
+      if (feedbackRepository != null) {
+        val res = feedbackRepository.submitFeedback(
+          date = _selectedDate.value,
+          mealType = mealType,
+          rating = rating,
+          comment = comment,
+          employeeName = employeeName
+        )
+        if (res.isSuccess) {
+          _userMessage.value = "Thank you for rating ${mealType.displayName} ($rating ★)!"
+        } else {
+          _userMessage.value = res.exceptionOrNull()?.message ?: "Failed to submit rating"
+        }
+      } else {
+        _userMessage.value = "Feedback submitted!"
+      }
+    }
+  }
+
   fun deleteTemplate(template: MenuTemplate) {
     viewModelScope.launch {
       menuRepository.deleteTemplate(template)
@@ -316,11 +357,12 @@ class MenuViewModel(
   }
 
   class Factory(
-    private val menuRepository: MenuRepository
+    private val menuRepository: MenuRepository,
+    private val feedbackRepository: MealFeedbackRepository? = null
   ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
-      return MenuViewModel(menuRepository) as T
+      return MenuViewModel(menuRepository, feedbackRepository) as T
     }
   }
 }

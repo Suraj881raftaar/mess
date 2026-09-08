@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.FreeBreakfast
 import androidx.compose.material.icons.filled.LunchDining
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.People
+import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
@@ -97,6 +98,7 @@ fun ReportsScreen(
   val uiState by viewModel.uiState.collectAsStateWithLifecycle()
   val context = LocalContext.current
   var menuExpanded by remember { mutableStateOf(false) }
+  var upiTargetEmployee by remember { mutableStateOf<EmployeeReportItem?>(null) }
 
   Scaffold(
     modifier = modifier
@@ -274,7 +276,24 @@ fun ReportsScreen(
       item = detail,
       formattedMonth = uiState.formattedMonth,
       costPerMealRupees = uiState.costPerMealRupees,
+      onOpenUpi = { upiTargetEmployee = detail },
       onDismiss = { viewModel.selectEmployeeForDetail(null) }
+    )
+  }
+
+  // UPI QR Dialog
+  upiTargetEmployee?.let { detail ->
+    UpiPaymentDialog(
+      employeeName = detail.employee.name,
+      month = uiState.formattedMonth,
+      amountRupees = detail.payablePaise / 100.0,
+      upiId = "officemess@upi",
+      payeeName = "Office Mess Account",
+      onDismiss = { upiTargetEmployee = null },
+      onPaymentRecorded = {
+        upiTargetEmployee = null
+        viewModel.selectEmployeeForDetail(null)
+      }
     )
   }
 }
@@ -863,6 +882,7 @@ private fun EmployeeBillDetailDialog(
   item: EmployeeReportItem,
   formattedMonth: String,
   costPerMealRupees: Double,
+  onOpenUpi: () -> Unit = {},
   onDismiss: () -> Unit
 ) {
   val employee = item.employee
@@ -871,8 +891,26 @@ private fun EmployeeBillDetailDialog(
   AlertDialog(
     onDismissRequest = onDismiss,
     confirmButton = {
-      TextButton(onClick = onDismiss) {
-        Text("Close")
+      Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (item.payablePaise > 0) {
+          Button(
+            onClick = {
+              onOpenUpi()
+            },
+            shape = RoundedCornerShape(8.dp)
+          ) {
+            Icon(
+              imageVector = Icons.Default.QrCode2,
+              contentDescription = null,
+              modifier = Modifier.size(16.dp)
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+            Text("UPI Pay QR")
+          }
+        }
+        TextButton(onClick = onDismiss) {
+          Text("Close")
+        }
       }
     },
     dismissButton = {

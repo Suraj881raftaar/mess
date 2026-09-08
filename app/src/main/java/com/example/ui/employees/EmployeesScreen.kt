@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -71,7 +72,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.foundation.lazy.LazyRow
 import com.example.data.entity.Employee
+import com.example.data.model.DietaryPreference
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -201,6 +204,7 @@ fun EmployeesScreen(
       onNameChange = { viewModel.onNameChange(it) },
       onDepartmentChange = { viewModel.onDepartmentChange(it) },
       onPhoneChange = { viewModel.onPhoneChange(it) },
+      onDietaryPreferenceChange = { viewModel.onDietaryPreferenceChange(it) },
       onSubmit = { viewModel.submitForm() },
       onDismiss = { viewModel.closeDialog() }
     )
@@ -454,6 +458,17 @@ private fun EmployeeItemCard(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
           )
+          Text(
+            text = "•",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.outline
+          )
+          Text(
+            text = employee.dietaryPreference.label,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.secondary
+          )
         }
       }
 
@@ -588,6 +603,7 @@ private fun EmployeeDetailContent(
       ) {
         DetailRow(icon = Icons.Default.Badge, label = "Employee Code / ID", value = employee.employeeCode)
         DetailRow(icon = Icons.Default.Person, label = "Department", value = employee.department)
+        DetailRow(icon = Icons.Default.Restaurant, label = "Dietary Preference", value = employee.dietaryPreference.label)
         DetailRow(icon = Icons.Default.Phone, label = "Phone", value = employee.phone ?: "Not provided")
         DetailRow(
           icon = Icons.Default.CheckCircle,
@@ -710,6 +726,7 @@ private fun EmployeeFormDialog(
   onNameChange: (String) -> Unit,
   onDepartmentChange: (String) -> Unit,
   onPhoneChange: (String) -> Unit,
+  onDietaryPreferenceChange: (DietaryPreference) -> Unit,
   onSubmit: () -> Unit,
   onDismiss: () -> Unit
 ) {
@@ -807,6 +824,25 @@ private fun EmployeeFormDialog(
             .fillMaxWidth()
             .testTag("employee_form_phone_input")
         )
+
+        // Dietary Preference Selection
+        Column {
+          Text(
+            text = "Dietary Preference",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+          )
+          Spacer(modifier = Modifier.height(4.dp))
+          LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            items(DietaryPreference.values()) { pref ->
+              FilterChip(
+                selected = formState.dietaryPreference == pref,
+                onClick = { onDietaryPreferenceChange(pref) },
+                label = { Text(pref.label, style = MaterialTheme.typography.labelSmall) }
+              )
+            }
+          }
+        }
       }
     },
     confirmButton = {

@@ -13,6 +13,7 @@ import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.Dashboard
+import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.RestaurantMenu
 import androidx.compose.material3.Icon
@@ -37,7 +38,9 @@ import com.example.data.database.MessDatabase
 import com.example.data.repository.AttendanceRepository
 import com.example.data.repository.EmployeeRepository
 import com.example.data.repository.ExpenseRepository
+import com.example.data.repository.MealFeedbackRepository
 import com.example.data.repository.MenuRepository
+import com.example.data.repository.PantryRepository
 import com.example.ui.attendance.AttendanceScreen
 import com.example.ui.attendance.AttendanceViewModel
 import com.example.ui.dashboard.DashboardScreen
@@ -48,6 +51,8 @@ import com.example.ui.expenses.ExpenseScreen
 import com.example.ui.expenses.ExpenseViewModel
 import com.example.ui.menu.MenuScreen
 import com.example.ui.menu.MenuViewModel
+import com.example.ui.pantry.PantryScreen
+import com.example.ui.pantry.PantryViewModel
 import com.example.ui.reports.ReportsScreen
 import com.example.ui.reports.ReportsViewModel
 import com.example.ui.theme.MyApplicationTheme
@@ -57,6 +62,7 @@ enum class MainDestination(val label: String, val icon: androidx.compose.ui.grap
   EMPLOYEES("Staff", Icons.Default.Badge),
   ATTENDANCE("Meals", Icons.Default.Restaurant),
   MENU("Menu", Icons.Default.RestaurantMenu),
+  PANTRY("Pantry", Icons.Default.Inventory2),
   EXPENSES("Expense", Icons.AutoMirrored.Filled.ReceiptLong),
   REPORTS("Reports", Icons.Default.Assessment)
 }
@@ -83,6 +89,16 @@ class MainActivity : ComponentActivity() {
     ExpenseRepository(database.expenseDao())
   }
 
+  private val feedbackRepository by lazy {
+    val database = MessDatabase.getDatabase(applicationContext)
+    MealFeedbackRepository(database.mealFeedbackDao())
+  }
+
+  private val pantryRepository by lazy {
+    val database = MessDatabase.getDatabase(applicationContext)
+    PantryRepository(database.pantryDao(), database.expenseDao())
+  }
+
   private val dashboardViewModel: DashboardViewModel by viewModels {
     DashboardViewModel.Factory(
       employeeRepository,
@@ -101,7 +117,11 @@ class MainActivity : ComponentActivity() {
   }
 
   private val menuViewModel: MenuViewModel by viewModels {
-    MenuViewModel.Factory(menuRepository)
+    MenuViewModel.Factory(menuRepository, feedbackRepository)
+  }
+
+  private val pantryViewModel: PantryViewModel by viewModels {
+    PantryViewModel.Factory(pantryRepository)
   }
 
   private val expenseViewModel: ExpenseViewModel by viewModels {
@@ -126,6 +146,7 @@ class MainActivity : ComponentActivity() {
           employeesViewModel = employeesViewModel,
           attendanceViewModel = attendanceViewModel,
           menuViewModel = menuViewModel,
+          pantryViewModel = pantryViewModel,
           expenseViewModel = expenseViewModel,
           reportsViewModel = reportsViewModel
         )
@@ -140,6 +161,7 @@ fun MainApp(
   employeesViewModel: EmployeesViewModel,
   attendanceViewModel: AttendanceViewModel,
   menuViewModel: MenuViewModel,
+  pantryViewModel: PantryViewModel,
   expenseViewModel: ExpenseViewModel,
   reportsViewModel: ReportsViewModel,
   modifier: Modifier = Modifier
@@ -159,16 +181,16 @@ fun MainApp(
               Icon(
                 destination.icon,
                 contentDescription = destination.label,
-                modifier = Modifier.size(22.dp)
+                modifier = Modifier.size(20.dp)
               )
             },
             label = {
               Text(
                 text = destination.label,
                 style = MaterialTheme.typography.labelSmall.copy(
-                  fontSize = 11.sp,
+                  fontSize = 10.sp,
                   fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                  letterSpacing = (-0.2).sp
+                  letterSpacing = (-0.3).sp
                 ),
                 maxLines = 1,
                 softWrap = false,
@@ -194,6 +216,9 @@ fun MainApp(
             onNavigateToReports = { currentDestination = MainDestination.REPORTS }
           )
         }
+        MainDestination.EMPLOYEES -> {
+          EmployeesScreen(viewModel = employeesViewModel)
+        }
         MainDestination.ATTENDANCE -> {
           AttendanceScreen(
             viewModel = attendanceViewModel,
@@ -203,11 +228,11 @@ fun MainApp(
         MainDestination.MENU -> {
           MenuScreen(viewModel = menuViewModel)
         }
+        MainDestination.PANTRY -> {
+          PantryScreen(viewModel = pantryViewModel)
+        }
         MainDestination.EXPENSES -> {
           ExpenseScreen(viewModel = expenseViewModel)
-        }
-        MainDestination.EMPLOYEES -> {
-          EmployeesScreen(viewModel = employeesViewModel)
         }
         MainDestination.REPORTS -> {
           ReportsScreen(viewModel = reportsViewModel)
