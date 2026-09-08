@@ -33,9 +33,16 @@ import androidx.compose.material.icons.filled.LunchDining
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -43,6 +50,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -50,9 +58,13 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -60,6 +72,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.util.CurrencyUtils
+import com.example.util.ReportExportUtils
 
 @Composable
 fun ReportsScreen(
@@ -73,13 +86,17 @@ fun ReportsScreen(
       .fillMaxSize()
       .testTag("reports_screen")
   ) {
+    val context = LocalContext.current
+
     // Top Bar: Month Selection Controls
     MonthSelectionHeader(
       formattedMonth = uiState.formattedMonth,
       selectedMonth = uiState.selectedMonth,
       onPreviousMonth = { viewModel.previousMonth() },
       onNextMonth = { viewModel.nextMonth() },
-      onResetCurrentMonth = { viewModel.resetToCurrentMonth() }
+      onResetCurrentMonth = { viewModel.resetToCurrentMonth() },
+      onExportCsv = { ReportExportUtils.shareReportCsv(context, uiState) },
+      onShareSummary = { ReportExportUtils.shareReportText(context, uiState) }
     )
 
     LazyColumn(
@@ -95,7 +112,9 @@ fun ReportsScreen(
           totalExpensesPaise = uiState.totalExpensesPaise,
           totalMeals = uiState.totalMeals,
           costPerMealRupees = uiState.costPerMealRupees,
-          activeEmployees = uiState.activeEmployeeCount
+          activeEmployees = uiState.activeEmployeeCount,
+          onExportCsv = { ReportExportUtils.shareReportCsv(context, uiState) },
+          onShareSummary = { ReportExportUtils.shareReportText(context, uiState) }
         )
       }
 
@@ -164,9 +183,12 @@ private fun MonthSelectionHeader(
   selectedMonth: String,
   onPreviousMonth: () -> Unit,
   onNextMonth: () -> Unit,
-  onResetCurrentMonth: () -> Unit
+  onResetCurrentMonth: () -> Unit,
+  onExportCsv: () -> Unit,
+  onShareSummary: () -> Unit
 ) {
   val isCurrentMonth = selectedMonth == ReportsViewModel.getCurrentMonthString()
+  var menuExpanded by remember { mutableStateOf(false) }
 
   Surface(
     modifier = Modifier.fillMaxWidth(),
@@ -214,15 +236,64 @@ private fun MonthSelectionHeader(
         }
       }
 
-      IconButton(
-        onClick = onNextMonth,
-        modifier = Modifier.testTag("btn_next_month")
-      ) {
-        Icon(
-          imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-          contentDescription = "Next Month",
-          tint = MaterialTheme.colorScheme.primary
-        )
+      Row(verticalAlignment = Alignment.CenterVertically) {
+        IconButton(
+          onClick = onNextMonth,
+          modifier = Modifier.testTag("btn_next_month")
+        ) {
+          Icon(
+            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+            contentDescription = "Next Month",
+            tint = MaterialTheme.colorScheme.primary
+          )
+        }
+
+        Box {
+          IconButton(
+            onClick = { menuExpanded = true },
+            modifier = Modifier.testTag("btn_export_menu")
+          ) {
+            Icon(
+              imageVector = Icons.Default.Share,
+              contentDescription = "Export & Share Report",
+              tint = MaterialTheme.colorScheme.primary
+            )
+          }
+
+          DropdownMenu(
+            expanded = menuExpanded,
+            onDismissRequest = { menuExpanded = false }
+          ) {
+            DropdownMenuItem(
+              text = { Text("Export CSV File (Excel)") },
+              leadingIcon = {
+                Icon(
+                  imageVector = Icons.Default.FileDownload,
+                  contentDescription = null
+                )
+              },
+              onClick = {
+                menuExpanded = false
+                onExportCsv()
+              },
+              modifier = Modifier.testTag("menu_item_export_csv")
+            )
+            DropdownMenuItem(
+              text = { Text("Share Summary Text") },
+              leadingIcon = {
+                Icon(
+                  imageVector = Icons.Default.Share,
+                  contentDescription = null
+                )
+              },
+              onClick = {
+                menuExpanded = false
+                onShareSummary()
+              },
+              modifier = Modifier.testTag("menu_item_share_summary")
+            )
+          }
+        }
       }
     }
   }
@@ -233,7 +304,9 @@ private fun MonthlyOverviewSummaryCard(
   totalExpensesPaise: Long,
   totalMeals: Int,
   costPerMealRupees: Double,
-  activeEmployees: Int
+  activeEmployees: Int,
+  onExportCsv: () -> Unit,
+  onShareSummary: () -> Unit
 ) {
   Card(
     modifier = Modifier.fillMaxWidth(),
@@ -379,6 +452,46 @@ private fun MonthlyOverviewSummaryCard(
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.testTag("report_cost_per_meal")
           )
+        }
+      }
+
+      Spacer(modifier = Modifier.height(12.dp))
+
+      // Export Buttons Row
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+      ) {
+        Button(
+          onClick = onExportCsv,
+          modifier = Modifier
+            .weight(1f)
+            .testTag("btn_export_csv_card"),
+          shape = RoundedCornerShape(10.dp)
+        ) {
+          Icon(
+            imageVector = Icons.Default.FileDownload,
+            contentDescription = null,
+            modifier = Modifier.size(18.dp)
+          )
+          Spacer(modifier = Modifier.width(6.dp))
+          Text(text = "Export CSV", style = MaterialTheme.typography.labelMedium)
+        }
+
+        OutlinedButton(
+          onClick = onShareSummary,
+          modifier = Modifier
+            .weight(1f)
+            .testTag("btn_share_summary_card"),
+          shape = RoundedCornerShape(10.dp)
+        ) {
+          Icon(
+            imageVector = Icons.Default.Share,
+            contentDescription = null,
+            modifier = Modifier.size(18.dp)
+          )
+          Spacer(modifier = Modifier.width(6.dp))
+          Text(text = "Share Report", style = MaterialTheme.typography.labelMedium)
         }
       }
     }
@@ -700,12 +813,33 @@ private fun EmployeeBillDetailDialog(
   onDismiss: () -> Unit
 ) {
   val employee = item.employee
+  val context = LocalContext.current
 
   AlertDialog(
     onDismissRequest = onDismiss,
     confirmButton = {
       TextButton(onClick = onDismiss) {
         Text("Close")
+      }
+    },
+    dismissButton = {
+      TextButton(
+        onClick = {
+          ReportExportUtils.shareEmployeeBillText(
+            context = context,
+            item = item,
+            formattedMonth = formattedMonth,
+            costPerMealRupees = costPerMealRupees
+          )
+        }
+      ) {
+        Icon(
+          imageVector = Icons.Default.Share,
+          contentDescription = null,
+          modifier = Modifier.size(16.dp)
+        )
+        Spacer(modifier = Modifier.width(4.dp))
+        Text("Share Slip")
       }
     },
     title = {
