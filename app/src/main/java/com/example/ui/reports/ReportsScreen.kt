@@ -23,19 +23,22 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.filled.Assessment
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.DinnerDining
+import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.FreeBreakfast
 import androidx.compose.material.icons.filled.LunchDining
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.FileDownload
-import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Today
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -44,6 +47,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -53,9 +57,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -64,6 +71,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -71,97 +79,191 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.ui.theme.BreakfastAccent
+import com.example.ui.theme.BreakfastContainerLight
+import com.example.ui.theme.DinnerAccent
+import com.example.ui.theme.DinnerContainerLight
+import com.example.ui.theme.LunchAccent
+import com.example.ui.theme.LunchContainerLight
 import com.example.util.CurrencyUtils
 import com.example.util.ReportExportUtils
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReportsScreen(
   viewModel: ReportsViewModel,
   modifier: Modifier = Modifier
 ) {
   val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+  val context = LocalContext.current
+  var menuExpanded by remember { mutableStateOf(false) }
 
-  Column(
+  Scaffold(
     modifier = modifier
       .fillMaxSize()
-      .testTag("reports_screen")
-  ) {
-    val context = LocalContext.current
+      .testTag("reports_screen"),
+    topBar = {
+      TopAppBar(
+        title = {
+          Column {
+            Text(
+              text = "Mess Reports & Bills",
+              style = MaterialTheme.typography.titleLarge,
+              fontWeight = FontWeight.Bold
+            )
+            Text(
+              text = uiState.formattedMonth + " • " + CurrencyUtils.formatPaise(uiState.totalExpensesPaise),
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+          }
+        },
+        actions = {
+          val currentMonth = ReportsViewModel.getCurrentMonthString()
+          if (uiState.selectedMonth != currentMonth) {
+            IconButton(
+              onClick = { viewModel.resetToCurrentMonth() },
+              modifier = Modifier.testTag("btn_reset_current_month")
+            ) {
+              Icon(
+                imageVector = Icons.Default.Today,
+                contentDescription = "This Month",
+                tint = MaterialTheme.colorScheme.primary
+              )
+            }
+          }
 
-    // Top Bar: Month Selection Controls
-    MonthSelectionHeader(
-      formattedMonth = uiState.formattedMonth,
-      selectedMonth = uiState.selectedMonth,
-      onPreviousMonth = { viewModel.previousMonth() },
-      onNextMonth = { viewModel.nextMonth() },
-      onResetCurrentMonth = { viewModel.resetToCurrentMonth() },
-      onExportCsv = { ReportExportUtils.shareReportCsv(context, uiState) },
-      onShareSummary = { ReportExportUtils.shareReportText(context, uiState) }
-    )
+          Box {
+            IconButton(
+              onClick = { menuExpanded = true },
+              modifier = Modifier.testTag("btn_export_menu")
+            ) {
+              Icon(
+                imageVector = Icons.Default.Share,
+                contentDescription = "Export & Share Report",
+                tint = MaterialTheme.colorScheme.primary
+              )
+            }
 
-    LazyColumn(
+            DropdownMenu(
+              expanded = menuExpanded,
+              onDismissRequest = { menuExpanded = false }
+            ) {
+              DropdownMenuItem(
+                text = { Text("Export CSV (Excel)") },
+                leadingIcon = {
+                  Icon(
+                    imageVector = Icons.Default.FileDownload,
+                    contentDescription = null
+                  )
+                },
+                onClick = {
+                  menuExpanded = false
+                  ReportExportUtils.shareReportCsv(context, uiState)
+                },
+                modifier = Modifier.testTag("menu_item_export_csv")
+              )
+              DropdownMenuItem(
+                text = { Text("Share Text Summary") },
+                leadingIcon = {
+                  Icon(
+                    imageVector = Icons.Default.Share,
+                    contentDescription = null
+                  )
+                },
+                onClick = {
+                  menuExpanded = false
+                  ReportExportUtils.shareReportText(context, uiState)
+                },
+                modifier = Modifier.testTag("menu_item_share_summary")
+              )
+            }
+          }
+        },
+        colors = TopAppBarDefaults.topAppBarColors(
+          containerColor = MaterialTheme.colorScheme.surface
+        )
+      )
+    }
+  ) { paddingValues ->
+    Column(
       modifier = Modifier
         .fillMaxSize()
-        .weight(1f),
-      contentPadding = PaddingValues(16.dp),
-      verticalArrangement = Arrangement.spacedBy(16.dp)
+        .padding(paddingValues)
     ) {
-      // High-level Financial Summary Overview Card
-      item {
-        MonthlyOverviewSummaryCard(
-          totalExpensesPaise = uiState.totalExpensesPaise,
-          totalMeals = uiState.totalMeals,
-          costPerMealRupees = uiState.costPerMealRupees,
-          activeEmployees = uiState.activeEmployeeCount,
-          onExportCsv = { ReportExportUtils.shareReportCsv(context, uiState) },
-          onShareSummary = { ReportExportUtils.shareReportText(context, uiState) }
-        )
-      }
+      // Top Bar: Month Selection Controls
+      MonthSelectionHeader(
+        formattedMonth = uiState.formattedMonth,
+        selectedMonth = uiState.selectedMonth,
+        onPreviousMonth = { viewModel.previousMonth() },
+        onNextMonth = { viewModel.nextMonth() },
+        onResetCurrentMonth = { viewModel.resetToCurrentMonth() }
+      )
 
-      // Meal Breakdown Card (Breakfast, Lunch, Dinner)
-      item {
-        MealBreakdownSummaryCard(
-          breakfastCount = uiState.breakfastCount,
-          lunchCount = uiState.lunchCount,
-          dinnerCount = uiState.dinnerCount,
-          totalMeals = uiState.totalMeals
-        )
-      }
-
-      // Section Header: Employee-Wise Billing
-      item {
-        EmployeeBillingHeader(
-          totalEmployees = uiState.employeeBills.size,
-          searchQuery = uiState.searchQuery,
-          onSearchChange = { viewModel.setSearchQuery(it) },
-          showOnlyWithMeals = uiState.showOnlyWithMeals,
-          onToggleOnlyWithMeals = { viewModel.setShowOnlyWithMeals(it) }
-        )
-      }
-
-      // Employee Bills List
-      if (uiState.filteredEmployeeBills.isEmpty()) {
+      LazyColumn(
+        modifier = Modifier
+          .fillMaxSize()
+          .weight(1f),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+      ) {
+        // High-level Financial Summary Overview Card
         item {
-          EmptyReportState(
-            searchQuery = uiState.searchQuery,
-            showOnlyWithMeals = uiState.showOnlyWithMeals
-          )
-        }
-      } else {
-        items(
-          items = uiState.filteredEmployeeBills,
-          key = { it.employee.id }
-        ) { item ->
-          EmployeeBillCard(
-            item = item,
+          MonthlyOverviewSummaryCard(
+            totalExpensesPaise = uiState.totalExpensesPaise,
+            totalMeals = uiState.totalMeals,
             costPerMealRupees = uiState.costPerMealRupees,
-            onClick = { viewModel.selectEmployeeForDetail(item) }
+            activeEmployees = uiState.activeEmployeeCount,
+            onExportCsv = { ReportExportUtils.shareReportCsv(context, uiState) },
+            onShareSummary = { ReportExportUtils.shareReportText(context, uiState) }
           )
         }
-      }
 
-      item {
-        Spacer(modifier = Modifier.height(16.dp))
+        // Meal Breakdown Card (Breakfast, Lunch, Dinner)
+        item {
+          MealBreakdownSummaryCard(
+            breakfastCount = uiState.breakfastCount,
+            lunchCount = uiState.lunchCount,
+            dinnerCount = uiState.dinnerCount,
+            totalMeals = uiState.totalMeals
+          )
+        }
+
+        // Section Header: Employee-Wise Billing
+        item {
+          EmployeeBillingHeader(
+            totalEmployees = uiState.employeeBills.size,
+            searchQuery = uiState.searchQuery,
+            onSearchChange = { viewModel.setSearchQuery(it) },
+            showOnlyWithMeals = uiState.showOnlyWithMeals,
+            onToggleOnlyWithMeals = { viewModel.setShowOnlyWithMeals(it) }
+          )
+        }
+
+        // Employee Bills List
+        if (uiState.filteredEmployeeBills.isEmpty()) {
+          item {
+            EmptyReportState(
+              searchQuery = uiState.searchQuery,
+              showOnlyWithMeals = uiState.showOnlyWithMeals
+            )
+          }
+        } else {
+          items(
+            items = uiState.filteredEmployeeBills,
+            key = { it.employee.id }
+          ) { item ->
+            EmployeeBillCard(
+              item = item,
+              costPerMealRupees = uiState.costPerMealRupees,
+              onClick = { viewModel.selectEmployeeForDetail(item) }
+            )
+          }
+        }
+
+        item {
+          Spacer(modifier = Modifier.height(16.dp))
+        }
       }
     }
   }
@@ -183,22 +285,18 @@ private fun MonthSelectionHeader(
   selectedMonth: String,
   onPreviousMonth: () -> Unit,
   onNextMonth: () -> Unit,
-  onResetCurrentMonth: () -> Unit,
-  onExportCsv: () -> Unit,
-  onShareSummary: () -> Unit
+  onResetCurrentMonth: () -> Unit
 ) {
   val isCurrentMonth = selectedMonth == ReportsViewModel.getCurrentMonthString()
-  var menuExpanded by remember { mutableStateOf(false) }
 
   Surface(
     modifier = Modifier.fillMaxWidth(),
-    tonalElevation = 2.dp,
-    color = MaterialTheme.colorScheme.surface
+    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
   ) {
     Row(
       modifier = Modifier
         .fillMaxWidth()
-        .padding(horizontal = 12.dp, vertical = 8.dp),
+        .padding(horizontal = 8.dp, vertical = 4.dp),
       horizontalArrangement = Arrangement.SpaceBetween,
       verticalAlignment = Alignment.CenterVertically
     ) {
@@ -208,96 +306,43 @@ private fun MonthSelectionHeader(
       ) {
         Icon(
           imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-          contentDescription = "Previous Month",
-          tint = MaterialTheme.colorScheme.primary
+          contentDescription = "Previous Month"
         )
       }
 
-      Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.weight(1f)
+      Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
       ) {
+        Icon(
+          imageVector = Icons.Default.CalendarMonth,
+          contentDescription = null,
+          tint = MaterialTheme.colorScheme.primary,
+          modifier = Modifier.size(18.dp)
+        )
+        Spacer(modifier = Modifier.width(8.dp))
         Text(
           text = formattedMonth.ifBlank { selectedMonth },
           style = MaterialTheme.typography.titleMedium,
-          fontWeight = FontWeight.Bold,
+          fontWeight = FontWeight.SemiBold,
           color = MaterialTheme.colorScheme.onSurface,
           modifier = Modifier.testTag("report_selected_month")
         )
-        if (!isCurrentMonth) {
-          Text(
-            text = "Tap to jump to This Month",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier
-              .clickable(onClick = onResetCurrentMonth)
-              .testTag("btn_reset_current_month")
-          )
-        }
       }
 
-      Row(verticalAlignment = Alignment.CenterVertically) {
-        IconButton(
-          onClick = onNextMonth,
-          modifier = Modifier.testTag("btn_next_month")
-        ) {
-          Icon(
-            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-            contentDescription = "Next Month",
-            tint = MaterialTheme.colorScheme.primary
-          )
-        }
-
-        Box {
-          IconButton(
-            onClick = { menuExpanded = true },
-            modifier = Modifier.testTag("btn_export_menu")
-          ) {
-            Icon(
-              imageVector = Icons.Default.Share,
-              contentDescription = "Export & Share Report",
-              tint = MaterialTheme.colorScheme.primary
-            )
-          }
-
-          DropdownMenu(
-            expanded = menuExpanded,
-            onDismissRequest = { menuExpanded = false }
-          ) {
-            DropdownMenuItem(
-              text = { Text("Export CSV File (Excel)") },
-              leadingIcon = {
-                Icon(
-                  imageVector = Icons.Default.FileDownload,
-                  contentDescription = null
-                )
-              },
-              onClick = {
-                menuExpanded = false
-                onExportCsv()
-              },
-              modifier = Modifier.testTag("menu_item_export_csv")
-            )
-            DropdownMenuItem(
-              text = { Text("Share Summary Text") },
-              leadingIcon = {
-                Icon(
-                  imageVector = Icons.Default.Share,
-                  contentDescription = null
-                )
-              },
-              onClick = {
-                menuExpanded = false
-                onShareSummary()
-              },
-              modifier = Modifier.testTag("menu_item_share_summary")
-            )
-          }
-        }
+      IconButton(
+        onClick = onNextMonth,
+        modifier = Modifier.testTag("btn_next_month")
+      ) {
+        Icon(
+          imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+          contentDescription = "Next Month"
+        )
       }
     }
   }
 }
+
 
 @Composable
 private fun MonthlyOverviewSummaryCard(
@@ -541,6 +586,8 @@ private fun MealBreakdownSummaryCard(
           count = breakfastCount,
           percentage = if (totalMeals > 0) (breakfastCount * 100 / totalMeals) else 0,
           icon = Icons.Default.FreeBreakfast,
+          accentColor = BreakfastAccent,
+          containerColor = BreakfastContainerLight,
           testTag = "report_breakfast_count",
           modifier = Modifier.weight(1f)
         )
@@ -549,6 +596,8 @@ private fun MealBreakdownSummaryCard(
           count = lunchCount,
           percentage = if (totalMeals > 0) (lunchCount * 100 / totalMeals) else 0,
           icon = Icons.Default.LunchDining,
+          accentColor = LunchAccent,
+          containerColor = LunchContainerLight,
           testTag = "report_lunch_count",
           modifier = Modifier.weight(1f)
         )
@@ -557,6 +606,8 @@ private fun MealBreakdownSummaryCard(
           count = dinnerCount,
           percentage = if (totalMeals > 0) (dinnerCount * 100 / totalMeals) else 0,
           icon = Icons.Default.DinnerDining,
+          accentColor = DinnerAccent,
+          containerColor = DinnerContainerLight,
           testTag = "report_dinner_count",
           modifier = Modifier.weight(1f)
         )
@@ -571,13 +622,15 @@ private fun MealCountTile(
   count: Int,
   percentage: Int,
   icon: androidx.compose.ui.graphics.vector.ImageVector,
+  accentColor: Color,
+  containerColor: Color,
   testTag: String,
   modifier: Modifier = Modifier
 ) {
   Surface(
     modifier = modifier,
     shape = RoundedCornerShape(12.dp),
-    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+    color = containerColor.copy(alpha = 0.5f)
   ) {
     Column(
       modifier = Modifier
@@ -588,8 +641,8 @@ private fun MealCountTile(
       Icon(
         imageVector = icon,
         contentDescription = null,
-        tint = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.size(18.dp)
+        tint = accentColor,
+        modifier = Modifier.size(20.dp)
       )
       Spacer(modifier = Modifier.height(4.dp))
       Text(
