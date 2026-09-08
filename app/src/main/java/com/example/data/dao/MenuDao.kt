@@ -23,6 +23,9 @@ interface MenuDao {
   @Query("SELECT * FROM menus WHERE date BETWEEN :startDate AND :endDate ORDER BY date ASC")
   fun getMenuForDateRange(startDate: String, endDate: String): Flow<List<Menu>>
 
+  @Query("SELECT * FROM menus ORDER BY date DESC")
+  fun getAllMenus(): Flow<List<Menu>>
+
   @Upsert
   suspend fun upsert(menu: Menu): Long
 

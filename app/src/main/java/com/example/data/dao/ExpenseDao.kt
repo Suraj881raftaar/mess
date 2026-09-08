@@ -63,6 +63,9 @@ interface ExpenseDao {
   )
   fun getCategoryExpenseSummaryForMonth(monthPrefix: String): Flow<List<CategoryExpenseSummary>>
 
+  @Query("SELECT DISTINCT vendor FROM expenses WHERE date LIKE :monthPrefix || '%' AND vendor IS NOT NULL AND vendor != '' ORDER BY vendor ASC")
+  fun getVendorsForMonth(monthPrefix: String): Flow<List<String>>
+
   @Insert(onConflict = OnConflictStrategy.ABORT)
   suspend fun insert(expense: Expense): Long
 

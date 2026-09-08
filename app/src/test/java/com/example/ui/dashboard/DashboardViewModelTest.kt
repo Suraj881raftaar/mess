@@ -9,6 +9,8 @@ import com.example.data.repository.AttendanceRepository
 import com.example.data.repository.EmployeeRepository
 import com.example.data.repository.ExpenseRepository
 import com.example.data.repository.MenuRepository
+import com.example.data.repository.PaymentRepository
+import com.example.data.repository.SettingsRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
@@ -20,6 +22,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -37,6 +40,8 @@ class DashboardViewModelTest {
   private lateinit var attendanceRepository: AttendanceRepository
   private lateinit var menuRepository: MenuRepository
   private lateinit var expenseRepository: ExpenseRepository
+  private lateinit var paymentRepository: PaymentRepository
+  private lateinit var settingsRepository: SettingsRepository
   private lateinit var viewModel: DashboardViewModel
 
   private val testDate = "2026-09-08"
@@ -48,14 +53,18 @@ class DashboardViewModelTest {
     db = MessDatabase.createInMemoryDatabase(context)
     employeeRepository = EmployeeRepository(db.employeeDao())
     attendanceRepository = AttendanceRepository(db.mealAttendanceDao())
-    menuRepository = MenuRepository(db.menuDao())
+    menuRepository = MenuRepository(db.menuDao(), db.menuTemplateDao())
     expenseRepository = ExpenseRepository(db.expenseDao())
+    paymentRepository = PaymentRepository(db.paymentDao())
+    settingsRepository = SettingsRepository(db.messSettingDao())
 
     viewModel = DashboardViewModel(
       employeeRepository,
       attendanceRepository,
       menuRepository,
-      expenseRepository
+      expenseRepository,
+      paymentRepository,
+      settingsRepository
     )
     viewModel.setDate(testDate)
   }
@@ -172,6 +181,22 @@ class DashboardViewModelTest {
 
     // Cost per meal: ₹5,000 / 10 meals = ₹500.00
     assertEquals(500.0, state.currentMonthCostPerMealRupees, 0.001)
+  }
+
+  @Test
+  fun testPaymentTrackingInDashboard() = runBlocking {
+    val emp1 = employeeRepository.addEmployee("EMP001", "Rahul Sharma", "IT").getOrThrow()
+
+    paymentRepository.recordPayment(
+      employeeId = emp1,
+      month = "2026-09",
+      amountPaise = 2500000L, // ₹25,000
+      paymentDate = "2026-09-08",
+      paymentMethod = "Cash"
+    )
+
+    val state = viewModel.uiState.first { it.currentMonthCollectedPaise == 2500000L }
+    assertEquals(2500000L, state.currentMonthCollectedPaise)
   }
 
   @Test

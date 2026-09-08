@@ -1,6 +1,14 @@
 package com.example.ui.reports
 
 import com.example.data.entity.Employee
+import com.example.data.entity.Payment
+
+enum class PaymentStatus {
+  PAID,
+  PARTIAL,
+  PENDING,
+  NO_DUES
+}
 
 data class EmployeeReportItem(
   val employee: Employee,
@@ -9,7 +17,11 @@ data class EmployeeReportItem(
   val dinnerCount: Int = 0,
   val totalMeals: Int = 0,
   val payablePaise: Long = 0L,
-  val payableRupees: Double = 0.0
+  val payableRupees: Double = 0.0,
+  val paidPaise: Long = 0L,
+  val pendingPaise: Long = 0L,
+  val paymentStatus: PaymentStatus = PaymentStatus.NO_DUES,
+  val payments: List<Payment> = emptyList()
 )
 
 data class ReportUiState(
@@ -22,6 +34,10 @@ data class ReportUiState(
   val dinnerCount: Int = 0,
   val activeEmployeeCount: Int = 0,
   val costPerMealRupees: Double = 0.0,
+  val totalBilledPaise: Long = 0L,
+  val totalCollectedPaise: Long = 0L,
+  val totalPendingPaise: Long = 0L,
+  val collectionPercentage: Float = 0f,
   val employeeBills: List<EmployeeReportItem> = emptyList(),
   val filteredEmployeeBills: List<EmployeeReportItem> = emptyList(),
   val searchQuery: String = "",

@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.data.entity.Menu
+import com.example.data.entity.MenuTemplate
 import com.example.data.model.MealType
 import com.example.data.repository.MenuRepository
 import java.text.SimpleDateFormat
@@ -69,6 +70,13 @@ class MenuViewModel(
 
   private val _userMessage = MutableStateFlow<String?>(null)
   val userMessage: StateFlow<String?> = _userMessage.asStateFlow()
+
+  val templates: StateFlow<List<MenuTemplate>> = menuRepository.allTemplates
+    .stateIn(
+      scope = viewModelScope,
+      started = SharingStarted.WhileSubscribed(5000),
+      initialValue = emptyList()
+    )
 
   @OptIn(ExperimentalCoroutinesApi::class)
   val dailyMenuState: StateFlow<DailyMenuState> = _selectedDate
@@ -249,6 +257,57 @@ class MenuViewModel(
     val current = _copyDayDialogState.value ?: return
     viewModelScope.launch {
       copyMenuSync(current.sourceDate, current.targetDate)
+    }
+  }
+
+  fun copyWeekMenu(toMonday: String) {
+    viewModelScope.launch {
+      val fromMonday = _selectedWeekMonday.value
+      val res = menuRepository.copyWeekMenu(fromMonday, toMonday)
+      if (res.isSuccess) {
+        _userMessage.value = "Successfully copied week menu plan (${res.getOrDefault(0)} meals) to $toMonday."
+      } else {
+        _userMessage.value = "Failed to copy week menu: ${res.exceptionOrNull()?.message}"
+      }
+    }
+  }
+
+  suspend fun saveCurrentDayAsTemplateSync(name: String): Result<Long> {
+    val res = menuRepository.saveDayAsTemplate(name, _selectedDate.value)
+    if (res.isSuccess) {
+      _userMessage.value = "Saved template '$name' successfully!"
+    } else {
+      _userMessage.value = "Failed to save template: ${res.exceptionOrNull()?.message}"
+    }
+    return res
+  }
+
+  fun saveCurrentDayAsTemplate(name: String) {
+    viewModelScope.launch {
+      saveCurrentDayAsTemplateSync(name)
+    }
+  }
+
+  suspend fun applyTemplateSync(templateId: Long): Result<Unit> {
+    val res = menuRepository.applyTemplateToDate(templateId, _selectedDate.value)
+    if (res.isSuccess) {
+      _userMessage.value = "Applied menu template to ${_selectedDate.value}!"
+    } else {
+      _userMessage.value = "Failed to apply template: ${res.exceptionOrNull()?.message}"
+    }
+    return res
+  }
+
+  fun applyTemplate(templateId: Long) {
+    viewModelScope.launch {
+      applyTemplateSync(templateId)
+    }
+  }
+
+  fun deleteTemplate(template: MenuTemplate) {
+    viewModelScope.launch {
+      menuRepository.deleteTemplate(template)
+      _userMessage.value = "Template '${template.templateName}' deleted."
     }
   }
 

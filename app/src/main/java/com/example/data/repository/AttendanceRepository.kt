@@ -45,6 +45,45 @@ class AttendanceRepository(private val attendanceDao: MealAttendanceDao) {
     return attendanceDao.getEmployeeMealCountsForMonth(monthPrefix)
   }
 
+  fun getAttendanceForMonth(monthPrefix: String): Flow<List<MealAttendance>> {
+    return attendanceDao.getAttendanceForMonth(monthPrefix)
+  }
+
+  fun getActiveDatesForMonth(monthPrefix: String): Flow<List<String>> {
+    return attendanceDao.getActiveDatesForMonth(monthPrefix)
+  }
+
+  suspend fun copyAttendance(fromDate: String, toDate: String): Result<Int> {
+    val sourceList = attendanceDao.getAttendanceForDateOnce(fromDate)
+    if (sourceList.isEmpty()) {
+      return Result.failure(IllegalStateException("No attendance found for date $fromDate"))
+    }
+    val now = System.currentTimeMillis()
+    val copied = sourceList.map { src ->
+      val existing = attendanceDao.getRecord(src.employeeId, toDate, src.mealType)
+      existing?.copy(present = src.present, updatedAt = now) ?: MealAttendance(
+        employeeId = src.employeeId,
+        date = toDate,
+        mealType = src.mealType,
+        present = src.present,
+        createdAt = now,
+        updatedAt = now
+      )
+    }
+    attendanceDao.upsertAll(copied)
+    return Result.success(copied.size)
+  }
+
+  suspend fun setAllEmployeesAttendance(
+    employeeIds: List<Long>,
+    date: String,
+    mealType: MealType,
+    present: Boolean
+  ) {
+    val batch = employeeIds.map { it to present }
+    setAttendanceBatch(batch, date, mealType)
+  }
+
   suspend fun setAttendance(
     employeeId: Long,
     date: String,

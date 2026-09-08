@@ -22,6 +22,7 @@ data class Expense(
   val amountPaise: Long,
   val vendor: String? = null,
   val notes: String? = null,
+  val receiptPath: String? = null,
   val createdAt: Long = System.currentTimeMillis(),
   val updatedAt: Long = System.currentTimeMillis()
 ) {

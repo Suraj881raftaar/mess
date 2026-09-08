@@ -288,7 +288,8 @@ fun AttendanceScreen(
             state = state,
             onToggleAttendance = { empId -> viewModel.toggleAttendance(empId) },
             onMarkAllPresent = { viewModel.markAllPresent() },
-            onMarkAllAbsent = { viewModel.markAllAbsent() }
+            onMarkAllAbsent = { viewModel.markAllAbsent() },
+            onCopyYesterday = { viewModel.copyPreviousDayAttendance() }
           )
         }
       }
@@ -400,7 +401,8 @@ private fun AttendanceRosterContent(
   state: AttendanceRosterState.Success,
   onToggleAttendance: (Long) -> Unit,
   onMarkAllPresent: () -> Unit,
-  onMarkAllAbsent: () -> Unit
+  onMarkAllAbsent: () -> Unit,
+  onCopyYesterday: () -> Unit = {}
 ) {
   Column(modifier = Modifier.fillMaxSize()) {
     // Attendance count summary & bulk actions row
@@ -412,34 +414,60 @@ private fun AttendanceRosterContent(
         containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
       )
     ) {
-      Row(
+      Column(
         modifier = Modifier
           .fillMaxWidth()
-          .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
+          .padding(horizontal = 16.dp, vertical = 10.dp)
       ) {
-        // Stats
-        Column {
-          Text(
-            text = "${state.presentCount} / ${state.totalCount} Present",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary
-          )
-          Text(
-            text = "${state.totalCount - state.presentCount} Absent",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-          )
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+          // Stats
+          Column {
+            Text(
+              text = "${state.presentCount} / ${state.totalCount} Present",
+              style = MaterialTheme.typography.titleMedium,
+              fontWeight = FontWeight.Bold,
+              color = MaterialTheme.colorScheme.primary
+            )
+            Text(
+              text = "${state.totalCount - state.presentCount} Absent",
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+          }
+
+          // Copy Yesterday Button
+          OutlinedButton(
+            onClick = onCopyYesterday,
+            modifier = Modifier.testTag("copy_yesterday_attendance_button"),
+            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+          ) {
+            Icon(
+              imageVector = Icons.Default.History,
+              contentDescription = null,
+              modifier = Modifier.size(16.dp)
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+            Text("Copy Yesterday", fontSize = 12.sp)
+          }
         }
 
+        Spacer(modifier = Modifier.height(8.dp))
+
         // Bulk action buttons
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
           OutlinedButton(
             onClick = onMarkAllPresent,
-            modifier = Modifier.testTag("mark_all_present_button"),
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+            modifier = Modifier
+              .weight(1f)
+              .testTag("mark_all_present_button"),
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
           ) {
             Icon(
               imageVector = Icons.Default.DoneAll,
@@ -452,8 +480,10 @@ private fun AttendanceRosterContent(
 
           OutlinedButton(
             onClick = onMarkAllAbsent,
-            modifier = Modifier.testTag("mark_all_absent_button"),
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+            modifier = Modifier
+              .weight(1f)
+              .testTag("mark_all_absent_button"),
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
           ) {
             Icon(
               imageVector = Icons.Default.RemoveDone,

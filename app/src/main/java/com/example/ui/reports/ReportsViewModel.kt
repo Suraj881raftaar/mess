@@ -3,10 +3,14 @@ package com.example.ui.reports
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.example.data.dao.EmployeeMealCount
+import com.example.data.dao.MonthlyMealBreakdown
 import com.example.data.entity.Employee
+import com.example.data.entity.Payment
 import com.example.data.repository.AttendanceRepository
 import com.example.data.repository.EmployeeRepository
 import com.example.data.repository.ExpenseRepository
+import com.example.data.repository.PaymentRepository
 import com.example.util.CurrencyUtils
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -15,7 +19,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -24,7 +30,8 @@ import java.util.Locale
 class ReportsViewModel(
   private val employeeRepository: EmployeeRepository,
   private val attendanceRepository: AttendanceRepository,
-  private val expenseRepository: ExpenseRepository
+  private val expenseRepository: ExpenseRepository,
+  private val paymentRepository: PaymentRepository? = null
 ) : ViewModel() {
 
   companion object {
@@ -84,6 +91,32 @@ class ReportsViewModel(
     _selectedEmployeeDetail.value = item
   }
 
+  fun recordPayment(
+    employeeId: Long,
+    month: String,
+    amountPaise: Long,
+    paymentDate: String,
+    paymentMethod: String,
+    notes: String?,
+    onComplete: (Boolean) -> Unit = {}
+  ) {
+    viewModelScope.launch {
+      val repo = paymentRepository
+      if (repo != null) {
+        val res = repo.recordPayment(employeeId, month, amountPaise, paymentDate, paymentMethod, notes)
+        onComplete(res.isSuccess)
+      } else {
+        onComplete(false)
+      }
+    }
+  }
+
+  fun deletePayment(payment: Payment) {
+    viewModelScope.launch {
+      paymentRepository?.deletePayment(payment)
+    }
+  }
+
   private data class RawMonthData(
     val month: String,
     val totalExpensesPaise: Long,
@@ -92,18 +125,36 @@ class ReportsViewModel(
     val dinnerCount: Int,
     val totalMeals: Int,
     val activeEmployeeCount: Int,
-    val employeeBills: List<EmployeeReportItem>
+    val employeeBills: List<EmployeeReportItem>,
+    val totalBilledPaise: Long,
+    val totalCollectedPaise: Long,
+    val totalPendingPaise: Long,
+    val collectionPercentage: Float
   )
 
   // Reactively fetch and calculate monthly data atomically paired with selectedMonth
   private val monthDataFlow = _selectedMonth.flatMapLatest { month ->
+    val paymentsFlow = paymentRepository?.getPaymentsForMonth(month) ?: flowOf(emptyList())
+
     combine(
       expenseRepository.getTotalExpensesPaiseForMonth(month),
       attendanceRepository.getMonthlyMealBreakdown(month),
       attendanceRepository.getEmployeeMealCountsForMonth(month),
       employeeRepository.allEmployees,
-      employeeRepository.activeEmployeeCount
-    ) { totalExpensesPaise, breakdown, employeeMealCounts, allEmployees, activeCount ->
+      employeeRepository.activeEmployeeCount,
+      paymentsFlow
+    ) { args: Array<Any?> ->
+      @Suppress("UNCHECKED_CAST")
+      val totalExpensesPaise = args[0] as Long
+      val breakdown = args[1] as MonthlyMealBreakdown
+      @Suppress("UNCHECKED_CAST")
+      val employeeMealCounts = args[2] as List<EmployeeMealCount>
+      @Suppress("UNCHECKED_CAST")
+      val allEmployees = args[3] as List<Employee>
+      val activeCount = args[4] as Int
+      @Suppress("UNCHECKED_CAST")
+      val paymentsList = args[5] as List<Payment>
+
       val costPerMealRupees = CurrencyUtils.calculateCostPerMealRupees(
         totalExpensePaise = totalExpensesPaise,
         totalMeals = breakdown.totalMeals
@@ -111,6 +162,7 @@ class ReportsViewModel(
 
       val mealCountsMap = employeeMealCounts.associateBy { it.employeeId }
       val employeesMap = allEmployees.associateBy { it.id }.toMutableMap()
+      val paymentsByEmployee = paymentsList.groupBy { it.employeeId }
 
       // Ensure any historical employee IDs present in attendance are accounted for
       employeeMealCounts.forEach { mealCount ->
@@ -125,6 +177,9 @@ class ReportsViewModel(
         }
       }
 
+      var totalBilledSum = 0L
+      var totalCollectedSum = 0L
+
       val billItems = employeesMap.values.map { employee ->
         val counts = mealCountsMap[employee.id]
         val breakfast = counts?.breakfastCount ?: 0
@@ -138,6 +193,20 @@ class ReportsViewModel(
         )
         val payablePaise = CurrencyUtils.rupeesToPaise(payableRupees)
 
+        val empPayments = paymentsByEmployee[employee.id] ?: emptyList()
+        val paidPaise = empPayments.sumOf { it.amountPaise }
+        val pendingPaise = (payablePaise - paidPaise).coerceAtLeast(0L)
+
+        totalBilledSum += payablePaise
+        totalCollectedSum += paidPaise
+
+        val paymentStatus = when {
+          payablePaise == 0L && paidPaise == 0L -> PaymentStatus.NO_DUES
+          paidPaise >= payablePaise -> PaymentStatus.PAID
+          paidPaise > 0L -> PaymentStatus.PARTIAL
+          else -> PaymentStatus.PENDING
+        }
+
         EmployeeReportItem(
           employee = employee,
           breakfastCount = breakfast,
@@ -145,12 +214,21 @@ class ReportsViewModel(
           dinnerCount = dinner,
           totalMeals = total,
           payablePaise = payablePaise,
-          payableRupees = payableRupees
+          payableRupees = payableRupees,
+          paidPaise = paidPaise,
+          pendingPaise = pendingPaise,
+          paymentStatus = paymentStatus,
+          payments = empPayments
         )
       }.sortedWith(
         compareByDescending<EmployeeReportItem> { it.totalMeals > 0 }
           .thenBy { it.employee.employeeCode }
       )
+
+      val totalPendingSum = (totalBilledSum - totalCollectedSum).coerceAtLeast(0L)
+      val colPct = if (totalBilledSum > 0) {
+        ((totalCollectedSum.toFloat() / totalBilledSum.toFloat()) * 100f).coerceIn(0f, 100f)
+      } else 100f
 
       RawMonthData(
         month = month,
@@ -160,7 +238,11 @@ class ReportsViewModel(
         dinnerCount = breakdown.dinnerCount,
         totalMeals = breakdown.totalMeals,
         activeEmployeeCount = activeCount,
-        employeeBills = billItems
+        employeeBills = billItems,
+        totalBilledPaise = totalBilledSum,
+        totalCollectedPaise = totalCollectedSum,
+        totalPendingPaise = totalPendingSum,
+        collectionPercentage = colPct
       )
     }
   }
@@ -216,6 +298,10 @@ class ReportsViewModel(
       dinnerCount = rawData.dinnerCount,
       activeEmployeeCount = rawData.activeEmployeeCount,
       costPerMealRupees = costPerMealRupees,
+      totalBilledPaise = rawData.totalBilledPaise,
+      totalCollectedPaise = rawData.totalCollectedPaise,
+      totalPendingPaise = rawData.totalPendingPaise,
+      collectionPercentage = rawData.collectionPercentage,
       employeeBills = rawData.employeeBills,
       filteredEmployeeBills = filteredList,
       searchQuery = query,
@@ -235,7 +321,8 @@ class ReportsViewModel(
   class Factory(
     private val employeeRepository: EmployeeRepository,
     private val attendanceRepository: AttendanceRepository,
-    private val expenseRepository: ExpenseRepository
+    private val expenseRepository: ExpenseRepository,
+    private val paymentRepository: PaymentRepository? = null
   ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -243,7 +330,8 @@ class ReportsViewModel(
         return ReportsViewModel(
           employeeRepository,
           attendanceRepository,
-          expenseRepository
+          expenseRepository,
+          paymentRepository
         ) as T
       }
       throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")

@@ -31,6 +31,9 @@ class ExpenseRepository(private val expenseDao: ExpenseDao) {
   fun getCategoryExpenseSummaryForMonth(monthPrefix: String): Flow<List<CategoryExpenseSummary>> =
     expenseDao.getCategoryExpenseSummaryForMonth(monthPrefix)
 
+  fun getVendorsForMonth(monthPrefix: String): Flow<List<String>> =
+    expenseDao.getVendorsForMonth(monthPrefix)
+
   suspend fun addExpense(
     date: String,
     description: String,
@@ -39,7 +42,8 @@ class ExpenseRepository(private val expenseDao: ExpenseDao) {
     quantity: Double? = null,
     unit: String? = null,
     vendor: String? = null,
-    notes: String? = null
+    notes: String? = null,
+    receiptPath: String? = null
   ): Result<Long> {
     val trimmedDesc = description.trim()
     val trimmedDate = date.trim()
@@ -62,7 +66,8 @@ class ExpenseRepository(private val expenseDao: ExpenseDao) {
       quantity = quantity,
       unit = unit?.trim()?.ifBlank { null },
       vendor = vendor?.trim()?.ifBlank { null },
-      notes = notes?.trim()?.ifBlank { null }
+      notes = notes?.trim()?.ifBlank { null },
+      receiptPath = receiptPath?.trim()?.ifBlank { null }
     )
     val id = expenseDao.insert(expense)
     return Result.success(id)
@@ -86,6 +91,7 @@ class ExpenseRepository(private val expenseDao: ExpenseDao) {
         unit = expense.unit?.trim()?.ifBlank { null },
         vendor = expense.vendor?.trim()?.ifBlank { null },
         notes = expense.notes?.trim()?.ifBlank { null },
+        receiptPath = expense.receiptPath?.trim()?.ifBlank { null },
         updatedAt = System.currentTimeMillis()
       )
     )

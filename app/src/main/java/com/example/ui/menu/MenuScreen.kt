@@ -20,10 +20,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DinnerDining
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FreeBreakfast
@@ -71,6 +74,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.entity.Menu
+import com.example.data.entity.MenuTemplate
 import com.example.data.model.MealType
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -85,11 +89,16 @@ fun MenuScreen(
   val menuMode by viewModel.menuMode.collectAsStateWithLifecycle()
   val dailyState by viewModel.dailyMenuState.collectAsStateWithLifecycle()
   val weeklyState by viewModel.weeklyMenuState.collectAsStateWithLifecycle()
+  val templates by viewModel.templates.collectAsStateWithLifecycle()
   val editMealDialogState by viewModel.editMealDialogState.collectAsStateWithLifecycle()
   val copyDayDialogState by viewModel.copyDayDialogState.collectAsStateWithLifecycle()
   val userMessage by viewModel.userMessage.collectAsStateWithLifecycle()
 
   val snackbarHostState = remember { SnackbarHostState() }
+
+  var showTemplatesDialog by remember { mutableStateOf(false) }
+  var showSaveTemplateDialog by remember { mutableStateOf(false) }
+  var showCopyWeekDialog by remember { mutableStateOf(false) }
 
   LaunchedEffect(userMessage) {
     userMessage?.let {
@@ -124,6 +133,14 @@ fun MenuScreen(
           }
         },
         actions = {
+          // Templates button
+          IconButton(
+            onClick = { showTemplatesDialog = true },
+            modifier = Modifier.testTag("btn_menu_templates")
+          ) {
+            Icon(Icons.Default.Bookmark, contentDescription = "Menu Templates")
+          }
+
           if (menuMode == MenuMode.DAILY && dailyState.hasAnyMeal) {
             FilledTonalButton(
               onClick = { viewModel.openCopyDayDialog(dailyState.date) },
@@ -136,6 +153,19 @@ fun MenuScreen(
               )
               Spacer(modifier = Modifier.width(6.dp))
               Text("Copy Day")
+            }
+          } else if (menuMode == MenuMode.WEEKLY) {
+            FilledTonalButton(
+              onClick = { showCopyWeekDialog = true },
+              modifier = Modifier.testTag("btn_copy_week_menu")
+            ) {
+              Icon(
+                imageVector = Icons.Default.ContentCopy,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp)
+              )
+              Spacer(modifier = Modifier.width(6.dp))
+              Text("Copy Week")
             }
           }
         },
@@ -178,6 +208,7 @@ fun MenuScreen(
             onNextDay = { viewModel.selectNextDay() },
             onToday = { viewModel.selectToday() },
             onSelectDate = { viewModel.setDate(it) },
+            onSaveAsTemplate = { showSaveTemplateDialog = true },
             onEditMeal = { mealType, currentText ->
               viewModel.openEditMealDialog(dailyState.date, mealType, currentText)
             }
@@ -199,10 +230,12 @@ fun MenuScreen(
   // Edit Meal Dialog
   editMealDialogState?.let { dialogState ->
     EditMealDialog(
-      state = dialogState,
+      mealType = dialogState.mealType,
+      date = dialogState.date,
+      initialDescription = dialogState.currentDescription,
       onDismiss = { viewModel.closeEditMealDialog() },
-      onSave = { desc ->
-        viewModel.saveMealMenu(dialogState.date, dialogState.mealType, desc)
+      onSave = { newDesc ->
+        viewModel.saveMealMenu(dialogState.date, dialogState.mealType, newDesc)
       }
     )
   }
@@ -212,8 +245,161 @@ fun MenuScreen(
     CopyDayDialog(
       state = dialogState,
       onTargetDateChange = { viewModel.setCopyTargetDate(it) },
-      onDismiss = { viewModel.closeCopyDayDialog() },
-      onConfirm = { viewModel.confirmCopyMenu() }
+      onConfirm = { viewModel.confirmCopyMenu() },
+      onDismiss = { viewModel.closeCopyDayDialog() }
+    )
+  }
+
+  // Save Today as Template Dialog
+  if (showSaveTemplateDialog) {
+    var templateName by remember { mutableStateOf("") }
+    AlertDialog(
+      onDismissRequest = { showSaveTemplateDialog = false },
+      title = { Text("Save Menu as Template", fontWeight = FontWeight.Bold) },
+      text = {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+          Text("Give a name for this day's menu template (e.g., 'North Indian Feast', 'South Indian Standard'):")
+          OutlinedTextField(
+            value = templateName,
+            onValueChange = { templateName = it },
+            label = { Text("Template Name") },
+            singleLine = true,
+            modifier = Modifier
+              .fillMaxWidth()
+              .testTag("input_template_name")
+          )
+        }
+      },
+      confirmButton = {
+        Button(
+          onClick = {
+            if (templateName.isNotBlank()) {
+              viewModel.saveCurrentDayAsTemplate(templateName)
+              showSaveTemplateDialog = false
+            }
+          },
+          modifier = Modifier.testTag("confirm_save_template_button")
+        ) {
+          Text("Save Template")
+        }
+      },
+      dismissButton = {
+        TextButton(onClick = { showSaveTemplateDialog = false }) {
+          Text("Cancel")
+        }
+      }
+    )
+  }
+
+  // Templates Management Dialog
+  if (showTemplatesDialog) {
+    AlertDialog(
+      onDismissRequest = { showTemplatesDialog = false },
+      title = {
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.SpaceBetween,
+          verticalAlignment = Alignment.CenterVertically
+        ) {
+          Text("Menu Templates", fontWeight = FontWeight.Bold)
+          IconButton(onClick = {
+            showTemplatesDialog = false
+            showSaveTemplateDialog = true
+          }) {
+            Icon(Icons.Default.BookmarkAdd, contentDescription = "Save Current as Template")
+          }
+        }
+      },
+      text = {
+        if (templates.isEmpty()) {
+          Text("No templates saved yet. You can save any day's menu as a reusable template.")
+        } else {
+          LazyColumn(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+          ) {
+            items(templates, key = { it.id }) { tpl ->
+              OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(10.dp)) {
+                  Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                  ) {
+                    Text(
+                      text = tpl.templateName,
+                      style = MaterialTheme.typography.titleMedium,
+                      fontWeight = FontWeight.Bold
+                    )
+                    IconButton(
+                      onClick = { viewModel.deleteTemplate(tpl) },
+                      modifier = Modifier.size(24.dp)
+                    ) {
+                      Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
+                    }
+                  }
+                  Text(
+                    text = "B: ${tpl.breakfast ?: "None"} | L: ${tpl.lunch ?: "None"} | D: ${tpl.dinner ?: "None"}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                  )
+                  Spacer(modifier = Modifier.height(6.dp))
+                  Button(
+                    onClick = {
+                      viewModel.applyTemplate(tpl.id)
+                      showTemplatesDialog = false
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                  ) {
+                    Text("Apply to Selected Date")
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      confirmButton = {
+        TextButton(onClick = { showTemplatesDialog = false }) {
+          Text("Close")
+        }
+      }
+    )
+  }
+
+  // Copy Week Dialog
+  if (showCopyWeekDialog) {
+    var targetMonday by remember { mutableStateOf(MenuViewModel.addDays(weeklyState.startMonday, 7)) }
+    AlertDialog(
+      onDismissRequest = { showCopyWeekDialog = false },
+      title = { Text("Copy Week Menu Plan", fontWeight = FontWeight.Bold) },
+      text = {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+          Text("Copy entire week's menu (${weeklyState.formattedWeekRange}) to the following week starting on Monday:")
+          OutlinedTextField(
+            value = targetMonday,
+            onValueChange = { targetMonday = it },
+            label = { Text("Target Monday (yyyy-MM-dd)") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+          )
+        }
+      },
+      confirmButton = {
+        Button(
+          onClick = {
+            viewModel.copyWeekMenu(targetMonday)
+            showCopyWeekDialog = false
+          }
+        ) {
+          Text("Copy Entire Week")
+        }
+      },
+      dismissButton = {
+        TextButton(onClick = { showCopyWeekDialog = false }) {
+          Text("Cancel")
+        }
+      }
     )
   }
 }
@@ -225,21 +411,22 @@ private fun DailyMenuView(
   onNextDay: () -> Unit,
   onToday: () -> Unit,
   onSelectDate: (String) -> Unit,
-  onEditMeal: (MealType, String) -> Unit,
-  modifier: Modifier = Modifier
+  onSaveAsTemplate: () -> Unit = {},
+  onEditMeal: (MealType, String) -> Unit
 ) {
   var showDatePicker by remember { mutableStateOf(false) }
 
   Column(
-    modifier = modifier
+    modifier = Modifier
       .fillMaxSize()
-      .padding(horizontal = 16.dp, vertical = 8.dp)
+      .padding(16.dp)
   ) {
-    // Date Navigation Header
+    // Date Navigator Header
     Card(
       modifier = Modifier
         .fillMaxWidth()
-        .padding(vertical = 8.dp),
+        .testTag("menu_date_navigator"),
+      shape = RoundedCornerShape(16.dp),
       colors = CardDefaults.cardColors(
         containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
       )
@@ -253,60 +440,73 @@ private fun DailyMenuView(
       ) {
         IconButton(
           onClick = onPreviousDay,
-          modifier = Modifier.testTag("btn_prev_date")
+          modifier = Modifier.testTag("btn_menu_prev_day")
         ) {
           Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Previous Day")
         }
 
         Column(
           horizontalAlignment = Alignment.CenterHorizontally,
-          modifier = Modifier
-            .clickable { showDatePicker = true }
-            .padding(horizontal = 8.dp, vertical = 4.dp)
+          modifier = Modifier.clickable { showDatePicker = true }
         ) {
           Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-              text = state.formattedDate.ifBlank { state.date },
-              style = MaterialTheme.typography.titleMedium,
-              fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.width(4.dp))
             Icon(
               imageVector = Icons.Default.CalendarMonth,
-              contentDescription = "Pick date",
+              contentDescription = null,
               modifier = Modifier.size(18.dp),
               tint = MaterialTheme.colorScheme.primary
             )
-          }
-          if (state.isToday) {
+            Spacer(modifier = Modifier.width(6.dp))
             Text(
-              text = "Today",
-              style = MaterialTheme.typography.labelSmall,
-              color = MaterialTheme.colorScheme.primary,
-              fontWeight = FontWeight.SemiBold
+              text = state.formattedDate,
+              style = MaterialTheme.typography.titleMedium,
+              fontWeight = FontWeight.Bold,
+              modifier = Modifier.testTag("menu_selected_date_label")
             )
+          }
+
+          if (!state.isToday) {
+            Spacer(modifier = Modifier.height(2.dp))
+            OutlinedButton(
+              onClick = onToday,
+              contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+              modifier = Modifier
+                .height(24.dp)
+                .testTag("btn_menu_today")
+            ) {
+              Text("Go to Today", style = MaterialTheme.typography.labelSmall)
+            }
           }
         }
 
-        Row(verticalAlignment = Alignment.CenterVertically) {
-          if (!state.isToday) {
-            OutlinedButton(
-              onClick = onToday,
-              modifier = Modifier.testTag("btn_today"),
-              contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
-            ) {
-              Text("Today", style = MaterialTheme.typography.labelMedium)
-            }
-          }
-          IconButton(
-            onClick = onNextDay,
-            modifier = Modifier.testTag("btn_next_date")
-          ) {
-            Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Next Day")
-          }
+        IconButton(
+          onClick = onNextDay,
+          modifier = Modifier.testTag("btn_menu_next_day")
+        ) {
+          Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Next Day")
         }
       }
     }
+
+    Spacer(modifier = Modifier.height(8.dp))
+
+    if (state.hasAnyMeal) {
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.End
+      ) {
+        TextButton(
+          onClick = onSaveAsTemplate,
+          modifier = Modifier.testTag("btn_save_as_template")
+        ) {
+          Icon(Icons.Default.BookmarkAdd, contentDescription = null, modifier = Modifier.size(16.dp))
+          Spacer(modifier = Modifier.width(4.dp))
+          Text("Save as Template", style = MaterialTheme.typography.labelMedium)
+        }
+      }
+    }
+
+    Spacer(modifier = Modifier.height(8.dp))
 
     if (state.isLoading) {
       Box(
@@ -319,38 +519,33 @@ private fun DailyMenuView(
       }
     } else {
       LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-        contentPadding = PaddingValues(vertical = 8.dp)
+        modifier = Modifier
+          .fillMaxSize()
+          .testTag("daily_meals_list"),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
       ) {
         item {
           MealCard(
             mealType = MealType.BREAKFAST,
-            icon = Icons.Default.FreeBreakfast,
             menu = state.breakfast,
-            onEdit = { onEditMeal(MealType.BREAKFAST, state.breakfast?.description.orEmpty()) },
-            testTag = "meal_card_breakfast",
-            editTestTag = "btn_edit_breakfast"
+            icon = Icons.Default.FreeBreakfast,
+            onEdit = { onEditMeal(MealType.BREAKFAST, state.breakfast?.description ?: "") }
           )
         }
         item {
           MealCard(
             mealType = MealType.LUNCH,
-            icon = Icons.Default.LunchDining,
             menu = state.lunch,
-            onEdit = { onEditMeal(MealType.LUNCH, state.lunch?.description.orEmpty()) },
-            testTag = "meal_card_lunch",
-            editTestTag = "btn_edit_lunch"
+            icon = Icons.Default.LunchDining,
+            onEdit = { onEditMeal(MealType.LUNCH, state.lunch?.description ?: "") }
           )
         }
         item {
           MealCard(
             mealType = MealType.DINNER,
-            icon = Icons.Default.DinnerDining,
             menu = state.dinner,
-            onEdit = { onEditMeal(MealType.DINNER, state.dinner?.description.orEmpty()) },
-            testTag = "meal_card_dinner",
-            editTestTag = "btn_edit_dinner"
+            icon = Icons.Default.DinnerDining,
+            onEdit = { onEditMeal(MealType.DINNER, state.dinner?.description ?: "") }
           )
         }
       }
@@ -360,8 +555,8 @@ private fun DailyMenuView(
   if (showDatePicker) {
     DatePickerModal(
       initialDateString = state.date,
-      onDateSelected = { selectedDateStr ->
-        onSelectDate(selectedDateStr)
+      onDateSelected = {
+        onSelectDate(it)
         showDatePicker = false
       },
       onDismiss = { showDatePicker = false }
@@ -372,28 +567,26 @@ private fun DailyMenuView(
 @Composable
 private fun MealCard(
   mealType: MealType,
-  icon: ImageVector,
   menu: Menu?,
+  icon: ImageVector,
   onEdit: () -> Unit,
-  testTag: String,
-  editTestTag: String,
   modifier: Modifier = Modifier
 ) {
-  val hasContent = !menu?.description.isNullOrBlank()
+  val hasMenu = menu != null && menu.description.isNotBlank()
 
-  OutlinedCard(
+  Card(
     modifier = modifier
       .fillMaxWidth()
-      .testTag(testTag),
+      .testTag("meal_card_${mealType.name.lowercase()}"),
     shape = RoundedCornerShape(16.dp),
+    colors = CardDefaults.cardColors(
+      containerColor = if (hasMenu) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+      else MaterialTheme.colorScheme.surface
+    ),
     border = BorderStroke(
       width = 1.dp,
-      color = if (hasContent) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+      color = if (hasMenu) MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
       else MaterialTheme.colorScheme.outlineVariant
-    ),
-    colors = CardDefaults.outlinedCardColors(
-      containerColor = if (hasContent) MaterialTheme.colorScheme.surface
-      else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)
     )
   ) {
     Column(
@@ -413,7 +606,7 @@ private fun MealCard(
             tint = MaterialTheme.colorScheme.primary,
             modifier = Modifier.size(24.dp)
           )
-          Spacer(modifier = Modifier.width(8.dp))
+          Spacer(modifier = Modifier.width(10.dp))
           Text(
             text = mealType.displayName,
             style = MaterialTheme.typography.titleMedium,
@@ -421,33 +614,32 @@ private fun MealCard(
           )
         }
 
-        FilledTonalButton(
+        IconButton(
           onClick = onEdit,
-          modifier = Modifier.testTag(editTestTag)
+          modifier = Modifier.testTag("btn_edit_${mealType.name.lowercase()}")
         ) {
           Icon(
-            imageVector = if (hasContent) Icons.Default.Edit else Icons.Default.Edit,
+            imageVector = Icons.Default.Edit,
             contentDescription = "Edit ${mealType.displayName}",
-            modifier = Modifier.size(16.dp)
+            tint = MaterialTheme.colorScheme.primary
           )
-          Spacer(modifier = Modifier.width(6.dp))
-          Text(if (hasContent) "Edit" else "Set Menu")
         }
       }
 
-      Spacer(modifier = Modifier.height(12.dp))
+      Spacer(modifier = Modifier.height(8.dp))
 
-      if (hasContent) {
+      if (hasMenu) {
         Text(
-          text = menu!!.description,
+          text = menu.description,
           style = MaterialTheme.typography.bodyLarge,
-          color = MaterialTheme.colorScheme.onSurface
+          color = MaterialTheme.colorScheme.onSurface,
+          modifier = Modifier.testTag("menu_desc_${mealType.name.lowercase()}")
         )
       } else {
         Text(
-          text = "No menu items specified for ${mealType.displayName.lowercase()}.",
+          text = "No menu planned yet. Tap edit to enter items.",
           style = MaterialTheme.typography.bodyMedium,
-          color = MaterialTheme.colorScheme.onSurfaceVariant
+          color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
         )
       }
     }
@@ -460,19 +652,19 @@ private fun WeeklyMenuView(
   onPreviousWeek: () -> Unit,
   onNextWeek: () -> Unit,
   onThisWeek: () -> Unit,
-  onSelectDay: (String) -> Unit,
-  modifier: Modifier = Modifier
+  onSelectDay: (String) -> Unit
 ) {
   Column(
-    modifier = modifier
+    modifier = Modifier
       .fillMaxSize()
-      .padding(horizontal = 16.dp, vertical = 8.dp)
+      .padding(16.dp)
   ) {
-    // Week navigation header
+    // Week Navigator Header
     Card(
       modifier = Modifier
         .fillMaxWidth()
-        .padding(vertical = 8.dp),
+        .testTag("weekly_date_navigator"),
+      shape = RoundedCornerShape(16.dp),
       colors = CardDefaults.cardColors(
         containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
       )
@@ -573,7 +765,8 @@ private fun WeeklyDayCard(
           Text(
             text = dayItem.dayName,
             style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold
+            fontWeight = FontWeight.Bold,
+            color = if (dayItem.isToday) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
           )
           Spacer(modifier = Modifier.width(8.dp))
           Text(
@@ -581,67 +774,64 @@ private fun WeeklyDayCard(
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
           )
-          if (dayItem.isToday) {
-            Spacer(modifier = Modifier.width(8.dp))
+        }
+
+        if (dayItem.isToday) {
+          Card(
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary),
+            shape = RoundedCornerShape(6.dp)
+          ) {
             Text(
-              text = "(Today)",
+              text = "TODAY",
               style = MaterialTheme.typography.labelSmall,
-              color = MaterialTheme.colorScheme.primary,
+              color = MaterialTheme.colorScheme.onPrimary,
+              modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
               fontWeight = FontWeight.Bold
             )
           }
         }
-
-        Text(
-          text = "View / Edit >",
-          style = MaterialTheme.typography.labelMedium,
-          color = MaterialTheme.colorScheme.primary,
-          fontWeight = FontWeight.SemiBold
-        )
       }
 
       Spacer(modifier = Modifier.height(8.dp))
 
-      Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        MealSummaryRow(
-          mealName = "Breakfast",
-          content = dayItem.breakfast
+      if (!dayItem.hasContent) {
+        Text(
+          text = "No meals planned",
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
         )
-        MealSummaryRow(
-          mealName = "Lunch",
-          content = dayItem.lunch
-        )
-        MealSummaryRow(
-          mealName = "Dinner",
-          content = dayItem.dinner
-        )
+      } else {
+        if (dayItem.breakfast.isNotBlank()) {
+          WeeklyMealRow(meal = "B", description = dayItem.breakfast)
+        }
+        if (dayItem.lunch.isNotBlank()) {
+          WeeklyMealRow(meal = "L", description = dayItem.lunch)
+        }
+        if (dayItem.dinner.isNotBlank()) {
+          WeeklyMealRow(meal = "D", description = dayItem.dinner)
+        }
       }
     }
   }
 }
 
 @Composable
-private fun MealSummaryRow(
-  mealName: String,
-  content: String,
-  modifier: Modifier = Modifier
-) {
+private fun WeeklyMealRow(meal: String, description: String) {
   Row(
-    modifier = modifier.fillMaxWidth(),
+    modifier = Modifier
+      .fillMaxWidth()
+      .padding(vertical = 2.dp),
     verticalAlignment = Alignment.Top
   ) {
     Text(
-      text = "$mealName: ",
-      style = MaterialTheme.typography.bodySmall,
-      fontWeight = FontWeight.SemiBold,
-      color = MaterialTheme.colorScheme.onSurfaceVariant,
-      modifier = Modifier.width(76.dp)
+      text = "$meal: ",
+      style = MaterialTheme.typography.labelMedium,
+      fontWeight = FontWeight.Bold,
+      color = MaterialTheme.colorScheme.primary
     )
     Text(
-      text = content.ifBlank { "—" },
-      style = MaterialTheme.typography.bodySmall,
-      color = if (content.isNotBlank()) MaterialTheme.colorScheme.onSurface
-      else MaterialTheme.colorScheme.outline,
+      text = description,
+      style = MaterialTheme.typography.bodyMedium,
       maxLines = 1,
       overflow = TextOverflow.Ellipsis,
       modifier = Modifier.weight(1f)
@@ -651,49 +841,50 @@ private fun MealSummaryRow(
 
 @Composable
 private fun EditMealDialog(
-  state: EditMealDialogState,
+  mealType: MealType,
+  date: String,
+  initialDescription: String,
   onDismiss: () -> Unit,
   onSave: (String) -> Unit
 ) {
-  var descriptionText by remember { mutableStateOf(state.currentDescription) }
+  var description by remember { mutableStateOf(initialDescription) }
 
   AlertDialog(
     onDismissRequest = onDismiss,
     title = {
       Text(
-        text = "Edit ${state.mealType.displayName} Menu",
-        style = MaterialTheme.typography.titleLarge,
+        text = "Plan ${mealType.displayName}",
         fontWeight = FontWeight.Bold
       )
     },
     text = {
-      Column(modifier = Modifier.fillMaxWidth()) {
+      Column {
         Text(
-          text = "Date: ${state.date}",
-          style = MaterialTheme.typography.bodySmall,
+          text = "Date: $date",
+          style = MaterialTheme.typography.bodyMedium,
           color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Spacer(modifier = Modifier.height(12.dp))
         OutlinedTextField(
-          value = descriptionText,
-          onValueChange = { descriptionText = it },
-          label = { Text("Menu description") },
-          placeholder = { Text("e.g. Dal, Rice, Sabzi, Roti, Salad") },
-          minLines = 3,
-          maxLines = 6,
+          value = description,
+          onValueChange = { description = it },
+          label = { Text("Menu items & description") },
+          placeholder = { Text("e.g., Dal Makhani, Paneer Butter Masala, Roti, Rice") },
           modifier = Modifier
             .fillMaxWidth()
-            .testTag("edit_meal_input")
+            .testTag("input_meal_description"),
+          minLines = 3,
+          maxLines = 6
         )
       }
     },
     confirmButton = {
       Button(
-        onClick = { onSave(descriptionText) },
-        modifier = Modifier.testTag("btn_save_meal_menu")
+        onClick = { onSave(description) },
+        modifier = Modifier.testTag("btn_save_meal_dialog")
       ) {
         Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
-        Spacer(modifier = Modifier.width(6.dp))
+        Spacer(modifier = Modifier.width(4.dp))
         Text("Save")
       }
     },
@@ -709,44 +900,46 @@ private fun EditMealDialog(
 private fun CopyDayDialog(
   state: CopyDayDialogState,
   onTargetDateChange: (String) -> Unit,
-  onDismiss: () -> Unit,
-  onConfirm: () -> Unit
+  onConfirm: () -> Unit,
+  onDismiss: () -> Unit
 ) {
   var showTargetPicker by remember { mutableStateOf(false) }
 
   AlertDialog(
     onDismissRequest = onDismiss,
     title = {
-      Text(
-        text = "Copy Day's Menu",
-        style = MaterialTheme.typography.titleLarge,
-        fontWeight = FontWeight.Bold
-      )
+      Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(Icons.Default.ContentCopy, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+        Spacer(modifier = Modifier.width(8.dp))
+        Text("Copy Day's Menu", fontWeight = FontWeight.Bold)
+      }
     },
     text = {
-      Column(modifier = Modifier.fillMaxWidth()) {
+      Column {
         Text(
-          text = "Copy menu from: ${state.sourceDate}",
+          text = "Source: ${state.sourceDate}",
           style = MaterialTheme.typography.bodyMedium,
           fontWeight = FontWeight.SemiBold
         )
         Text(
           text = state.sourceSummary,
           style = MaterialTheme.typography.bodySmall,
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
-          modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
+          color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
+        Spacer(modifier = Modifier.height(16.dp))
+
         Text(
-          text = "Target Date:",
+          text = "Copy to Target Date:",
           style = MaterialTheme.typography.labelLarge,
-          fontWeight = FontWeight.SemiBold
+          fontWeight = FontWeight.Bold
         )
+        Spacer(modifier = Modifier.height(6.dp))
+
         OutlinedCard(
+          onClick = { showTargetPicker = true },
           modifier = Modifier
             .fillMaxWidth()
-            .clickable { showTargetPicker = true }
-            .padding(vertical = 6.dp)
             .testTag("copy_target_date_selector"),
           shape = RoundedCornerShape(8.dp)
         ) {

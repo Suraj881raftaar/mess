@@ -39,7 +39,7 @@ class MenuViewModelTest {
     Dispatchers.setMain(testDispatcher)
     val context = ApplicationProvider.getApplicationContext<Context>()
     db = MessDatabase.createInMemoryDatabase(context)
-    menuRepository = MenuRepository(db.menuDao())
+    menuRepository = MenuRepository(db.menuDao(), db.menuTemplateDao())
     viewModel = MenuViewModel(menuRepository)
   }
 
@@ -226,5 +226,27 @@ class MenuViewModelTest {
     viewModel.saveMealMenuSync(date, MealType.BREAKFAST, "Upma")
     val result = viewModel.copyMenuSync(date, date)
     assertFalse(result.isSuccess)
+  }
+
+  @Test
+  fun testMenuTemplateFlow() = runBlocking {
+    val date = "2026-09-08"
+    viewModel.setDate(date)
+    viewModel.saveMealMenuSync(date, MealType.BREAKFAST, "Poha")
+    viewModel.saveMealMenuSync(date, MealType.LUNCH, "Thali")
+    viewModel.saveMealMenuSync(date, MealType.DINNER, "Khichdi")
+
+    viewModel.saveCurrentDayAsTemplateSync("Standard Feast")
+    val templates = viewModel.templates.first { it.isNotEmpty() }
+    assertEquals(1, templates.size)
+    assertEquals("Standard Feast", templates[0].templateName)
+
+    viewModel.setDate("2026-09-15")
+    viewModel.applyTemplateSync(templates[0].id)
+
+    val appliedState = viewModel.dailyMenuState.first { it.breakfast != null }
+    assertEquals("Poha", appliedState.breakfast?.description)
+    assertEquals("Thali", appliedState.lunch?.description)
+    assertEquals("Khichdi", appliedState.dinner?.description)
   }
 }

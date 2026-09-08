@@ -25,13 +25,16 @@ import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.DinnerDining
 import androidx.compose.material.icons.filled.FreeBreakfast
 import androidx.compose.material.icons.filled.LunchDining
+import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.Payment
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.RestaurantMenu
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -39,11 +42,14 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -55,6 +61,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.data.entity.Expense
 import com.example.util.CurrencyUtils
 
 @Composable
@@ -65,6 +72,7 @@ fun DashboardScreen(
   onNavigateToExpenses: () -> Unit,
   onNavigateToEmployees: () -> Unit,
   onNavigateToReports: () -> Unit = {},
+  onNavigateToSettings: () -> Unit = {},
   modifier: Modifier = Modifier
 ) {
   val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -79,10 +87,26 @@ fun DashboardScreen(
     // Top Hero Header
     item {
       DashboardHeader(
+        messName = uiState.messName,
         formattedDate = uiState.formattedDate,
         activeEmployeeCount = uiState.activeEmployeeCount,
-        onNavigateToEmployees = onNavigateToEmployees
+        onNavigateToEmployees = onNavigateToEmployees,
+        onNavigateToSettings = onNavigateToSettings
       )
+    }
+
+    // Actionable Alerts Banner (if any tasks are pending)
+    if (uiState.unmarkedMealsToday.isNotEmpty() || uiState.missingMenuMealsToday.isNotEmpty() || uiState.currentMonthPendingPaise > 0) {
+      item {
+        ActionableAlertsBanner(
+          unmarkedMeals = uiState.unmarkedMealsToday.map { it.displayName },
+          missingMenuMeals = uiState.missingMenuMealsToday.map { it.displayName },
+          pendingPaise = uiState.currentMonthPendingPaise,
+          onMarkAttendance = onNavigateToAttendance,
+          onPlanMenu = onNavigateToMenu,
+          onViewBills = onNavigateToReports
+        )
+      }
     }
 
     // Key Stats Summary Cards
@@ -92,6 +116,17 @@ fun DashboardScreen(
         totalMonthExpensesPaise = uiState.currentMonthTotalExpensePaise,
         totalMonthMeals = uiState.currentMonthTotalMeals,
         totalTodayMeals = uiState.totalTodayMeals
+      )
+    }
+
+    // Payment Collection Progress Card
+    item {
+      PaymentCollectionProgressCard(
+        totalBilledPaise = uiState.currentMonthBilledPaise,
+        totalCollectedPaise = uiState.currentMonthCollectedPaise,
+        totalPendingPaise = uiState.currentMonthPendingPaise,
+        collectionPercentage = uiState.currentMonthCollectionPercentage,
+        onViewBilling = onNavigateToReports
       )
     }
 
@@ -128,6 +163,16 @@ fun DashboardScreen(
       )
     }
 
+    // Recent Expenses Card (if available)
+    if (uiState.recentExpenses.isNotEmpty()) {
+      item {
+        RecentExpensesSnippetCard(
+          expenses = uiState.recentExpenses,
+          onViewAll = onNavigateToExpenses
+        )
+      }
+    }
+
     // Quick Actions
     item {
       QuickActionsSection(
@@ -135,7 +180,8 @@ fun DashboardScreen(
         onNavigateToMenu = onNavigateToMenu,
         onNavigateToExpenses = onNavigateToExpenses,
         onNavigateToEmployees = onNavigateToEmployees,
-        onNavigateToReports = onNavigateToReports
+        onNavigateToReports = onNavigateToReports,
+        onNavigateToSettings = onNavigateToSettings
       )
     }
 
@@ -147,9 +193,11 @@ fun DashboardScreen(
 
 @Composable
 private fun DashboardHeader(
+  messName: String,
   formattedDate: String,
   activeEmployeeCount: Int,
-  onNavigateToEmployees: () -> Unit
+  onNavigateToEmployees: () -> Unit,
+  onNavigateToSettings: () -> Unit
 ) {
   Card(
     modifier = Modifier.fillMaxWidth(),
@@ -170,7 +218,7 @@ private fun DashboardHeader(
       ) {
         Column(modifier = Modifier.weight(1f)) {
           Text(
-            text = "Office Mess Manager",
+            text = messName.ifBlank { "Office Mess Manager" },
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onPrimaryContainer
@@ -193,39 +241,253 @@ private fun DashboardHeader(
           }
         }
 
-        Surface(
-          onClick = onNavigateToEmployees,
-          shape = RoundedCornerShape(12.dp),
-          color = MaterialTheme.colorScheme.surface,
-          tonalElevation = 2.dp,
-          modifier = Modifier.testTag("btn_navigate_employees")
-        ) {
-          Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
+        Row(verticalAlignment = Alignment.CenterVertically) {
+          IconButton(
+            onClick = onNavigateToSettings,
+            modifier = Modifier.testTag("dashboard_settings_button")
           ) {
             Icon(
-              imageVector = Icons.Default.People,
-              contentDescription = null,
-              tint = MaterialTheme.colorScheme.primary,
-              modifier = Modifier.size(18.dp)
+              imageVector = Icons.Default.Settings,
+              contentDescription = "Settings",
+              tint = MaterialTheme.colorScheme.onPrimaryContainer
             )
-            Spacer(modifier = Modifier.width(6.dp))
-            Column {
-              Text(
-                text = "$activeEmployeeCount Active",
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.testTag("active_employee_count")
+          }
+
+          Surface(
+            onClick = onNavigateToEmployees,
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 2.dp,
+            modifier = Modifier.testTag("btn_navigate_employees")
+          ) {
+            Row(
+              modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+              verticalAlignment = Alignment.CenterVertically
+            ) {
+              Icon(
+                imageVector = Icons.Default.People,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(16.dp)
               )
-              Text(
-                text = "Employees",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-              )
+              Spacer(modifier = Modifier.width(4.dp))
+              Column {
+                Text(
+                  text = "$activeEmployeeCount Active",
+                  style = MaterialTheme.typography.labelMedium,
+                  fontWeight = FontWeight.Bold,
+                  color = MaterialTheme.colorScheme.onSurface,
+                  modifier = Modifier.testTag("active_employee_count")
+                )
+                Text(
+                  text = "Staff",
+                  style = MaterialTheme.typography.labelSmall,
+                  color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+              }
             }
           }
+        }
+      }
+    }
+  }
+}
+
+@Composable
+private fun ActionableAlertsBanner(
+  unmarkedMeals: List<String>,
+  missingMenuMeals: List<String>,
+  pendingPaise: Long,
+  onMarkAttendance: () -> Unit,
+  onPlanMenu: () -> Unit,
+  onViewBills: () -> Unit
+) {
+  Card(
+    modifier = Modifier.fillMaxWidth(),
+    shape = RoundedCornerShape(16.dp),
+    colors = CardDefaults.cardColors(
+      containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.7f)
+    )
+  ) {
+    Column(modifier = Modifier.padding(14.dp)) {
+      Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(
+          Icons.Default.NotificationsActive,
+          contentDescription = null,
+          tint = MaterialTheme.colorScheme.onErrorContainer,
+          modifier = Modifier.size(20.dp)
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+          "Action Items & Alerts",
+          style = MaterialTheme.typography.titleSmall,
+          fontWeight = FontWeight.Bold,
+          color = MaterialTheme.colorScheme.onErrorContainer
+        )
+      }
+
+      if (unmarkedMeals.isNotEmpty()) {
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.SpaceBetween,
+          verticalAlignment = Alignment.CenterVertically
+        ) {
+          Text(
+            text = "• Today's ${unmarkedMeals.joinToString(", ")} attendance not recorded",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onErrorContainer,
+            modifier = Modifier.weight(1f)
+          )
+          OutlinedButton(
+            onClick = onMarkAttendance,
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+            shape = RoundedCornerShape(6.dp)
+          ) {
+            Text("Mark", style = MaterialTheme.typography.labelSmall)
+          }
+        }
+      }
+
+      if (missingMenuMeals.isNotEmpty()) {
+        Spacer(modifier = Modifier.height(4.dp))
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.SpaceBetween,
+          verticalAlignment = Alignment.CenterVertically
+        ) {
+          Text(
+            text = "• Menu unassigned for ${missingMenuMeals.joinToString(", ")}",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onErrorContainer,
+            modifier = Modifier.weight(1f)
+          )
+          OutlinedButton(
+            onClick = onPlanMenu,
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+            shape = RoundedCornerShape(6.dp)
+          ) {
+            Text("Plan", style = MaterialTheme.typography.labelSmall)
+          }
+        }
+      }
+
+      if (pendingPaise > 0) {
+        Spacer(modifier = Modifier.height(4.dp))
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.SpaceBetween,
+          verticalAlignment = Alignment.CenterVertically
+        ) {
+          Text(
+            text = "• ${CurrencyUtils.formatPaise(pendingPaise)} outstanding dues for this month",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onErrorContainer,
+            modifier = Modifier.weight(1f)
+          )
+          OutlinedButton(
+            onClick = onViewBills,
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+            shape = RoundedCornerShape(6.dp)
+          ) {
+            Text("Collect", style = MaterialTheme.typography.labelSmall)
+          }
+        }
+      }
+    }
+  }
+}
+
+@Composable
+private fun PaymentCollectionProgressCard(
+  totalBilledPaise: Long,
+  totalCollectedPaise: Long,
+  totalPendingPaise: Long,
+  collectionPercentage: Float,
+  onViewBilling: () -> Unit
+) {
+  Card(
+    modifier = Modifier.fillMaxWidth(),
+    shape = RoundedCornerShape(16.dp),
+    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+  ) {
+    Column(modifier = Modifier.padding(16.dp)) {
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+          Icon(
+            imageVector = Icons.Default.Payment,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(20.dp)
+          )
+          Spacer(modifier = Modifier.width(8.dp))
+          Text(
+            "Payment Collection",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold
+          )
+        }
+
+        Surface(
+          shape = RoundedCornerShape(8.dp),
+          color = if (collectionPercentage >= 80f) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.tertiaryContainer
+        ) {
+          Text(
+            text = String.format(java.util.Locale.US, "%.0f%% Collected", collectionPercentage),
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = if (collectionPercentage >= 80f) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onTertiaryContainer
+          )
+        }
+      }
+
+      Spacer(modifier = Modifier.height(10.dp))
+
+      LinearProgressIndicator(
+        progress = { (collectionPercentage / 100f).coerceIn(0f, 1f) },
+        modifier = Modifier
+          .fillMaxWidth()
+          .height(8.dp)
+          .clip(RoundedCornerShape(4.dp))
+      )
+
+      Spacer(modifier = Modifier.height(12.dp))
+
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween
+      ) {
+        Column {
+          Text("Collected", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+          Text(
+            CurrencyUtils.formatPaise(totalCollectedPaise),
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary
+          )
+        }
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+          Text("Outstanding", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+          Text(
+            CurrencyUtils.formatPaise(totalPendingPaise),
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Bold,
+            color = if (totalPendingPaise > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+          )
+        }
+        Column(horizontalAlignment = Alignment.End) {
+          Text("Total Bill", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+          Text(
+            CurrencyUtils.formatPaise(totalBilledPaise),
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Bold
+          )
         }
       }
     }
@@ -813,12 +1075,74 @@ private fun MonthlyFinancialCard(
 }
 
 @Composable
+private fun RecentExpensesSnippetCard(
+  expenses: List<Expense>,
+  onViewAll: () -> Unit
+) {
+  Card(
+    modifier = Modifier.fillMaxWidth(),
+    shape = RoundedCornerShape(16.dp),
+    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+  ) {
+    Column(modifier = Modifier.padding(16.dp)) {
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        Text(
+          "Recent Expenses",
+          style = MaterialTheme.typography.titleMedium,
+          fontWeight = FontWeight.SemiBold
+        )
+        TextButton(onClick = onViewAll) {
+          Text("View All", style = MaterialTheme.typography.labelSmall)
+        }
+      }
+
+      expenses.forEachIndexed { index, exp ->
+        if (index > 0) {
+          HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
+        }
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.SpaceBetween,
+          verticalAlignment = Alignment.CenterVertically
+        ) {
+          Column(modifier = Modifier.weight(1f)) {
+            Text(
+              text = exp.description,
+              style = MaterialTheme.typography.bodyMedium,
+              fontWeight = FontWeight.Medium,
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis
+            )
+            Text(
+              text = "${exp.date} • ${exp.category.displayName}",
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+          }
+          Text(
+            text = CurrencyUtils.formatPaise(exp.amountPaise),
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary
+          )
+        }
+      }
+    }
+  }
+}
+
+@Composable
 private fun QuickActionsSection(
   onNavigateToAttendance: () -> Unit,
   onNavigateToMenu: () -> Unit,
   onNavigateToExpenses: () -> Unit,
   onNavigateToEmployees: () -> Unit,
-  onNavigateToReports: () -> Unit
+  onNavigateToReports: () -> Unit,
+  onNavigateToSettings: () -> Unit
 ) {
   Column(modifier = Modifier.fillMaxWidth()) {
     Text(
@@ -866,9 +1190,15 @@ private fun QuickActionsSection(
         modifier = Modifier.weight(1f)
       )
       QuickActionButton(
-        label = "Reports & Bill",
+        label = "Billing & Dues",
         icon = Icons.Default.Assessment,
         onClick = onNavigateToReports,
+        modifier = Modifier.weight(1f)
+      )
+      QuickActionButton(
+        label = "Settings",
+        icon = Icons.Default.Settings,
+        onClick = onNavigateToSettings,
         modifier = Modifier.weight(1f)
       )
     }

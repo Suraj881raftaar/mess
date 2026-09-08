@@ -33,6 +33,21 @@ interface MealAttendanceDao {
   @Query("SELECT * FROM meal_attendances WHERE date = :date")
   fun getAttendanceForDate(date: String): Flow<List<MealAttendance>>
 
+  @Query("SELECT * FROM meal_attendances WHERE date = :date")
+  suspend fun getAttendanceForDateOnce(date: String): List<MealAttendance>
+
+  @Query("SELECT * FROM meal_attendances WHERE date BETWEEN :startDate AND :endDate ORDER BY date ASC, employeeId ASC")
+  fun getAttendanceForDateRange(startDate: String, endDate: String): Flow<List<MealAttendance>>
+
+  @Query("SELECT * FROM meal_attendances WHERE date LIKE :monthPrefix || '%' ORDER BY date ASC, employeeId ASC")
+  fun getAttendanceForMonth(monthPrefix: String): Flow<List<MealAttendance>>
+
+  @Query("SELECT * FROM meal_attendances ORDER BY date DESC")
+  fun getAllAttendances(): Flow<List<MealAttendance>>
+
+  @Query("SELECT DISTINCT date FROM meal_attendances WHERE date LIKE :monthPrefix || '%' AND present = 1 ORDER BY date ASC")
+  fun getActiveDatesForMonth(monthPrefix: String): Flow<List<String>>
+
   @Query("SELECT * FROM meal_attendances WHERE employeeId = :employeeId AND date LIKE :monthPrefix || '%' ORDER BY date DESC")
   fun getAttendanceForEmployeeAndMonth(employeeId: Long, monthPrefix: String): Flow<List<MealAttendance>>
 

@@ -251,6 +251,35 @@ class AttendanceViewModel(
     }
   }
 
+  fun copyPreviousDayAttendance() {
+    viewModelScope.launch {
+      try {
+        val parsed = DATE_FORMAT.parse(_selectedDate.value) ?: Date()
+        val cal = Calendar.getInstance().apply {
+          time = parsed
+          add(Calendar.DAY_OF_YEAR, -1)
+        }
+        val prevDateStr = DATE_FORMAT.format(cal.time)
+        val meal = _selectedMeal.value
+
+        val prevRecords = attendanceRepository.getAttendanceForDateAndMeal(prevDateStr, meal).first()
+        if (prevRecords.isEmpty()) {
+          _userMessage.value = "No attendance recorded on previous day ($prevDateStr) for ${meal.displayName}."
+          return@launch
+        }
+
+        val newDraft = mutableMapOf<Long, Boolean>()
+        prevRecords.forEach { record ->
+          newDraft[record.employeeId] = record.present
+        }
+        _draftAttendance.value = newDraft
+        _userMessage.value = "Copied ${meal.displayName} attendance from yesterday ($prevDateStr). Tap 'Save' to apply."
+      } catch (e: Exception) {
+        _userMessage.value = "Failed to copy attendance: ${e.message}"
+      }
+    }
+  }
+
   suspend fun saveAttendanceSync(): Boolean {
     val date = _selectedDate.value
     val meal = _selectedMeal.value

@@ -7,17 +7,24 @@ import com.example.data.dao.EmployeeDao
 import com.example.data.dao.ExpenseDao
 import com.example.data.dao.MealAttendanceDao
 import com.example.data.dao.MenuDao
+import com.example.data.dao.MenuTemplateDao
+import com.example.data.dao.MessSettingDao
+import com.example.data.dao.PaymentDao
 import com.example.data.database.MessDatabase
 import com.example.data.entity.Employee
 import com.example.data.entity.Expense
 import com.example.data.entity.MealAttendance
 import com.example.data.entity.Menu
+import com.example.data.entity.MenuTemplate
+import com.example.data.entity.Payment
 import com.example.data.model.ExpenseCategory
 import com.example.data.model.MealType
 import com.example.data.repository.AttendanceRepository
 import com.example.data.repository.EmployeeRepository
 import com.example.data.repository.ExpenseRepository
 import com.example.data.repository.MenuRepository
+import com.example.data.repository.PaymentRepository
+import com.example.data.repository.SettingsRepository
 import com.example.util.CurrencyUtils
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -25,7 +32,6 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Before
@@ -43,11 +49,16 @@ class MessDatabaseTest {
   private lateinit var attendanceDao: MealAttendanceDao
   private lateinit var menuDao: MenuDao
   private lateinit var expenseDao: ExpenseDao
+  private lateinit var paymentDao: PaymentDao
+  private lateinit var menuTemplateDao: MenuTemplateDao
+  private lateinit var messSettingDao: MessSettingDao
 
   private lateinit var employeeRepo: EmployeeRepository
   private lateinit var attendanceRepo: AttendanceRepository
   private lateinit var menuRepo: MenuRepository
   private lateinit var expenseRepo: ExpenseRepository
+  private lateinit var paymentRepo: PaymentRepository
+  private lateinit var settingsRepo: SettingsRepository
 
   @Before
   fun setup() {
@@ -57,11 +68,16 @@ class MessDatabaseTest {
     attendanceDao = db.mealAttendanceDao()
     menuDao = db.menuDao()
     expenseDao = db.expenseDao()
+    paymentDao = db.paymentDao()
+    menuTemplateDao = db.menuTemplateDao()
+    messSettingDao = db.messSettingDao()
 
     employeeRepo = EmployeeRepository(employeeDao)
     attendanceRepo = AttendanceRepository(attendanceDao)
-    menuRepo = MenuRepository(menuDao)
+    menuRepo = MenuRepository(menuDao, menuTemplateDao)
     expenseRepo = ExpenseRepository(expenseDao)
+    paymentRepo = PaymentRepository(paymentDao)
+    settingsRepo = SettingsRepository(messSettingDao)
   }
 
   @After
@@ -233,6 +249,71 @@ class MessDatabaseTest {
     assertEquals(2, targetMenus.size)
     val breakfast = targetMenus.find { it.mealType == MealType.BREAKFAST }
     assertEquals("Poha + Tea", breakfast?.description)
+  }
+
+  @Test
+  fun testMenuTemplates() = runBlocking {
+    menuRepo.setMenu("2026-09-01", MealType.BREAKFAST, "Idli & Vada")
+    menuRepo.setMenu("2026-09-01", MealType.LUNCH, "South Indian Thali")
+    menuRepo.setMenu("2026-09-01", MealType.DINNER, "Curd Rice")
+
+    val saveRes = menuRepo.saveDayAsTemplate("South Special", "2026-09-01")
+    assertTrue(saveRes.isSuccess)
+
+    val templates = menuRepo.allTemplates.first()
+    assertEquals(1, templates.size)
+    assertEquals("South Special", templates[0].templateName)
+
+    // Apply to new date 2026-09-10
+    val applyRes = menuRepo.applyTemplateToDate(templates[0].id, "2026-09-10")
+    assertTrue(applyRes.isSuccess)
+
+    val applied = menuRepo.getMenuForDate("2026-09-10").first()
+    assertEquals(3, applied.size)
+    assertEquals("Idli & Vada", applied.find { it.mealType == MealType.BREAKFAST }?.description)
+  }
+
+  @Test
+  fun testPaymentTracking() = runBlocking {
+    val empId = employeeDao.insert(
+      Employee(
+        employeeCode = "EMP100",
+        name = "Vikram Singh",
+        department = "Operations"
+      )
+    )
+
+    // Record Payment
+    val payRes = paymentRepo.recordPayment(
+      employeeId = empId,
+      month = "2026-09",
+      amountPaise = 84000L, // ₹840.00
+      paymentDate = "2026-09-08",
+      paymentMethod = "UPI",
+      notes = "GPay payment received"
+    )
+    assertTrue(payRes.isSuccess)
+
+    val payments = paymentRepo.getPaymentsForMonth("2026-09").first()
+    assertEquals(1, payments.size)
+    assertEquals(84000L, payments[0].amountPaise)
+    assertEquals("UPI", payments[0].paymentMethod)
+
+    val totalPaid = paymentRepo.getTotalPaidForMonthOnce("2026-09")
+    assertEquals(84000L, totalPaid)
+  }
+
+  @Test
+  fun testSettingsPersistence() = runBlocking {
+    settingsRepo.setMessName("Alpha Tech Mess")
+    val name = settingsRepo.getMessNameOnce()
+    assertEquals("Alpha Tech Mess", name)
+
+    settingsRepo.setRemindAttendance(true)
+    assertTrue(settingsRepo.getRemindAttendance().first())
+
+    settingsRepo.setThemeMode("DARK")
+    assertEquals("DARK", settingsRepo.getThemeMode().first())
   }
 
   @Test

@@ -3,6 +3,10 @@ package com.example.util
 import android.content.Context
 import android.content.Intent
 import androidx.core.content.FileProvider
+import com.example.data.entity.Employee
+import com.example.data.entity.Expense
+import com.example.data.entity.MealAttendance
+import com.example.data.model.MealType
 import com.example.ui.reports.ReportUiState
 import java.io.File
 import java.io.FileWriter
@@ -29,11 +33,14 @@ object ReportExportUtils {
     sb.append("Lunch Meals,").append(state.lunchCount).append("\n")
     sb.append("Dinner Meals,").append(state.dinnerCount).append("\n")
     sb.append("Total Meals Served,").append(state.totalMeals).append("\n")
-    sb.append("Cost Per Meal,").append("INR ").append(String.format(java.util.Locale.US, "%.2f", state.costPerMealRupees)).append("\n\n")
+    sb.append("Cost Per Meal,").append("INR ").append(String.format(java.util.Locale.US, "%.2f", state.costPerMealRupees)).append("\n")
+    sb.append("Total Billed,").append("INR ").append(String.format(java.util.Locale.US, "%.2f", CurrencyUtils.paiseToRupees(state.totalBilledPaise))).append("\n")
+    sb.append("Total Collected,").append("INR ").append(String.format(java.util.Locale.US, "%.2f", CurrencyUtils.paiseToRupees(state.totalCollectedPaise))).append("\n")
+    sb.append("Total Outstanding,").append("INR ").append(String.format(java.util.Locale.US, "%.2f", CurrencyUtils.paiseToRupees(state.totalPendingPaise))).append("\n\n")
 
     // Employee Billing Details Table
-    sb.append("--- EMPLOYEE BILLING DETAILS ---\n")
-    sb.append("Employee ID,Name,Department,Status,Breakfast,Lunch,Dinner,Total Meals,Cost Per Meal (INR),Payable Amount (INR)\n")
+    sb.append("--- EMPLOYEE BILLING & PAYMENT DETAILS ---\n")
+    sb.append("Employee ID,Name,Department,Status,Breakfast,Lunch,Dinner,Total Meals,Cost Per Meal (INR),Payable (INR),Paid (INR),Pending (INR),Payment Status\n")
 
     for (item in state.employeeBills) {
       val emp = item.employee
@@ -46,9 +53,57 @@ object ReportExportUtils {
       sb.append(item.dinnerCount).append(",")
       sb.append(item.totalMeals).append(",")
       sb.append(String.format(java.util.Locale.US, "%.2f", state.costPerMealRupees)).append(",")
-      sb.append(String.format(java.util.Locale.US, "%.2f", item.payableRupees)).append("\n")
+      sb.append(String.format(java.util.Locale.US, "%.2f", item.payableRupees)).append(",")
+      sb.append(String.format(java.util.Locale.US, "%.2f", CurrencyUtils.paiseToRupees(item.paidPaise))).append(",")
+      sb.append(String.format(java.util.Locale.US, "%.2f", CurrencyUtils.paiseToRupees(item.pendingPaise))).append(",")
+      sb.append(item.paymentStatus.name).append("\n")
     }
 
+    return sb.toString()
+  }
+
+  /**
+   * Generates a comprehensive Expense Ledger CSV
+   */
+  fun generateExpenseLedgerCsv(expenses: List<Expense>, formattedMonth: String): String {
+    val sb = StringBuilder()
+    sb.append("OFFICE MESS MANAGER - EXPENSE LEDGER ($formattedMonth)\n")
+    sb.append("Date,Description,Category,Vendor,Quantity,Unit,Amount (INR),Notes\n")
+    for (exp in expenses) {
+      sb.append(escapeCsv(exp.date)).append(",")
+      sb.append(escapeCsv(exp.description)).append(",")
+      sb.append(escapeCsv(exp.category.displayName)).append(",")
+      sb.append(escapeCsv(exp.vendor ?: "-")).append(",")
+      sb.append(exp.quantity?.toString() ?: "").append(",")
+      sb.append(escapeCsv(exp.unit ?: "")).append(",")
+      sb.append(String.format(java.util.Locale.US, "%.2f", exp.amountRupees)).append(",")
+      sb.append(escapeCsv(exp.notes ?: "")).append("\n")
+    }
+    return sb.toString()
+  }
+
+  /**
+   * Generates an Attendance Matrix CSV (Staff x Dates)
+   */
+  fun generateAttendanceMatrixCsv(
+    attendances: List<MealAttendance>,
+    employees: List<Employee>,
+    formattedMonth: String
+  ): String {
+    val sb = StringBuilder()
+    sb.append("OFFICE MESS MANAGER - ATTENDANCE MATRIX ($formattedMonth)\n")
+    sb.append("Employee ID,Name,Department,Date,Meal Type,Status\n")
+
+    val empMap = employees.associateBy { it.id }
+    for (att in attendances) {
+      val emp = empMap[att.employeeId]
+      sb.append(escapeCsv(emp?.employeeCode ?: "EMP-${att.employeeId}")).append(",")
+      sb.append(escapeCsv(emp?.name ?: "Unknown")).append(",")
+      sb.append(escapeCsv(emp?.department ?: "General")).append(",")
+      sb.append(escapeCsv(att.date)).append(",")
+      sb.append(att.mealType.displayName).append(",")
+      sb.append(if (att.present) "Present" else "Absent").append("\n")
+    }
     return sb.toString()
   }
 
@@ -66,6 +121,8 @@ object ReportExportUtils {
     sb.append("  - Lunch: ${state.lunchCount}\n")
     sb.append("  - Dinner: ${state.dinnerCount}\n")
     sb.append("• Cost Per Meal: ${CurrencyUtils.formatRupees(state.costPerMealRupees)}\n")
+    sb.append("• Total Collected: ${CurrencyUtils.formatPaise(state.totalCollectedPaise)} / ${CurrencyUtils.formatPaise(state.totalBilledPaise)}\n")
+    sb.append("• Outstanding Balance: ${CurrencyUtils.formatPaise(state.totalPendingPaise)}\n")
     sb.append("• Active Staff: ${state.activeEmployeeCount}\n\n")
 
     sb.append("📋 *EMPLOYEE BILLING BREAKDOWN:*\n")
@@ -76,7 +133,13 @@ object ReportExportUtils {
       for (item in billsWithMeals) {
         val emp = item.employee
         val statusTag = if (!emp.isActive) " (Inactive)" else ""
-        sb.append("${emp.employeeCode} - ${emp.name}$statusTag\n")
+        val payTag = when (item.paymentStatus) {
+          com.example.ui.reports.PaymentStatus.PAID -> " [PAID]"
+          com.example.ui.reports.PaymentStatus.PARTIAL -> " [PARTIAL: Due ${CurrencyUtils.formatPaise(item.pendingPaise)}]"
+          com.example.ui.reports.PaymentStatus.PENDING -> " [DUE: ${CurrencyUtils.formatPaise(item.payablePaise)}]"
+          com.example.ui.reports.PaymentStatus.NO_DUES -> ""
+        }
+        sb.append("${emp.employeeCode} - ${emp.name}$statusTag$payTag\n")
         sb.append("   ${item.totalMeals} meals (B:${item.breakfastCount}, L:${item.lunchCount}, D:${item.dinnerCount}) = ${CurrencyUtils.formatRupees(item.payableRupees)}\n")
       }
     }
@@ -125,6 +188,71 @@ object ReportExportUtils {
   }
 
   /**
+   * Shares the Expense Ledger CSV
+   */
+  fun shareExpenseLedgerCsv(context: Context, expenses: List<Expense>, formattedMonth: String) {
+    try {
+      val reportsDir = File(context.cacheDir, "reports")
+      if (!reportsDir.exists()) reportsDir.mkdirs()
+
+      val fileName = "Expense_Ledger_${formattedMonth.replace(" ", "_")}.csv"
+      val file = File(reportsDir, fileName)
+      val writer = FileWriter(file)
+      writer.write(generateExpenseLedgerCsv(expenses, formattedMonth))
+      writer.flush()
+      writer.close()
+
+      val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+      val intent = Intent(Intent.ACTION_SEND).apply {
+        type = "text/csv"
+        putExtra(Intent.EXTRA_SUBJECT, "Expense Ledger - $formattedMonth")
+        putExtra(Intent.EXTRA_STREAM, uri)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+      }
+      val chooser = Intent.createChooser(intent, "Share Expense Ledger")
+      chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+      context.startActivity(chooser)
+    } catch (e: Exception) {
+      e.printStackTrace()
+    }
+  }
+
+  /**
+   * Shares the Attendance Matrix CSV
+   */
+  fun shareAttendanceMatrixCsv(
+    context: Context,
+    attendances: List<MealAttendance>,
+    employees: List<Employee>,
+    formattedMonth: String
+  ) {
+    try {
+      val reportsDir = File(context.cacheDir, "reports")
+      if (!reportsDir.exists()) reportsDir.mkdirs()
+
+      val fileName = "Attendance_Matrix_${formattedMonth.replace(" ", "_")}.csv"
+      val file = File(reportsDir, fileName)
+      val writer = FileWriter(file)
+      writer.write(generateAttendanceMatrixCsv(attendances, employees, formattedMonth))
+      writer.flush()
+      writer.close()
+
+      val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+      val intent = Intent(Intent.ACTION_SEND).apply {
+        type = "text/csv"
+        putExtra(Intent.EXTRA_SUBJECT, "Attendance Matrix - $formattedMonth")
+        putExtra(Intent.EXTRA_STREAM, uri)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+      }
+      val chooser = Intent.createChooser(intent, "Share Attendance Matrix")
+      chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+      context.startActivity(chooser)
+    } catch (e: Exception) {
+      e.printStackTrace()
+    }
+  }
+
+  /**
    * Shares the plain text summary across messaging apps, email, or clipboard.
    */
   fun shareReportText(context: Context, state: ReportUiState) {
@@ -164,7 +292,10 @@ object ReportExportUtils {
       sb.append("Total Meals: ${item.totalMeals}\n")
       sb.append("Rate per Meal: ${CurrencyUtils.formatRupees(costPerMealRupees)}\n")
       sb.append("────────────────────────────\n")
-      sb.append("*Total Payable: ${CurrencyUtils.formatPaise(item.payablePaise)}*\n")
+      sb.append("Total Billed: ${CurrencyUtils.formatPaise(item.payablePaise)}\n")
+      sb.append("Total Paid: ${CurrencyUtils.formatPaise(item.paidPaise)}\n")
+      sb.append("*Balance Due: ${CurrencyUtils.formatPaise(item.pendingPaise)}*\n")
+      sb.append("Status: ${item.paymentStatus.name}\n")
       sb.append("────────────────────────────\n")
       sb.append("Generated by Office Mess Manager")
 

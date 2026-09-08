@@ -8,6 +8,7 @@ import com.example.data.model.MealType
 import com.example.data.repository.AttendanceRepository
 import com.example.data.repository.EmployeeRepository
 import com.example.data.repository.ExpenseRepository
+import com.example.data.repository.PaymentRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
@@ -35,6 +36,7 @@ class ReportsViewModelTest {
   private lateinit var employeeRepository: EmployeeRepository
   private lateinit var attendanceRepository: AttendanceRepository
   private lateinit var expenseRepository: ExpenseRepository
+  private lateinit var paymentRepository: PaymentRepository
   private lateinit var viewModel: ReportsViewModel
 
   private val testMonth = "2026-09"
@@ -47,11 +49,13 @@ class ReportsViewModelTest {
     employeeRepository = EmployeeRepository(db.employeeDao())
     attendanceRepository = AttendanceRepository(db.mealAttendanceDao())
     expenseRepository = ExpenseRepository(db.expenseDao())
+    paymentRepository = PaymentRepository(db.paymentDao())
 
     viewModel = ReportsViewModel(
       employeeRepository,
       attendanceRepository,
-      expenseRepository
+      expenseRepository,
+      paymentRepository
     )
     viewModel.setMonth(testMonth)
   }
@@ -293,5 +297,42 @@ class ReportsViewModelTest {
     viewModel.setSearchQuery("")
     val reset = viewModel.uiState.first { it.searchQuery == "" }
     assertEquals(2, reset.filteredEmployeeBills.size)
+  }
+
+  @Test
+  fun testPaymentSettlementInReports() = runBlocking {
+    val emp1 = employeeRepository.addEmployee("EMP001", "Rahul Sharma", "IT").getOrThrow()
+
+    // 10 meals
+    for (i in 1..10) {
+      attendanceRepository.setAttendance(emp1, "2026-09-0$i", MealType.LUNCH, true)
+    }
+
+    // Expense ₹1000.00 -> 100,000 paise -> ₹100/meal -> Rahul owes ₹1000.00
+    expenseRepository.addExpense(
+      date = "2026-09-01",
+      description = "Monthly Ration",
+      category = ExpenseCategory.GROCERIES,
+      amountPaise = 100000L
+    )
+
+    // Rahul pays ₹600.00 (60,000 paise)
+    paymentRepository.recordPayment(
+      employeeId = emp1,
+      month = testMonth,
+      amountPaise = 60000L,
+      paymentDate = "2026-09-08",
+      paymentMethod = "UPI"
+    )
+
+    val state = viewModel.uiState.first { it.totalExpensesPaise == 100000L && it.totalCollectedPaise == 60000L }
+    assertEquals(60000L, state.totalCollectedPaise)
+    assertEquals(40000L, state.totalPendingPaise)
+
+    val bill = state.employeeBills.first { it.employee.id == emp1 }
+    assertEquals(100000L, bill.payablePaise)
+    assertEquals(60000L, bill.paidPaise)
+    assertEquals(40000L, bill.pendingPaise)
+    assertEquals(PaymentStatus.PARTIAL, bill.paymentStatus)
   }
 }
