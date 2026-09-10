@@ -1,6 +1,7 @@
 package com.example.ui.dashboard
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,33 +21,29 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
-import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DinnerDining
 import androidx.compose.material.icons.filled.FreeBreakfast
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LunchDining
-import androidx.compose.material.icons.filled.NotificationsActive
-import androidx.compose.material.icons.filled.Payment
+import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.RestaurantMenu
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -55,13 +52,19 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.data.entity.Expense
+import com.example.ui.theme.BreakfastAccent
+import com.example.ui.theme.BreakfastContainerLight
+import com.example.ui.theme.DinnerAccent
+import com.example.ui.theme.DinnerContainerLight
+import com.example.ui.theme.LunchAccent
+import com.example.ui.theme.LunchContainerLight
 import com.example.util.CurrencyUtils
 
 @Composable
@@ -84,7 +87,7 @@ fun DashboardScreen(
     contentPadding = PaddingValues(16.dp),
     verticalArrangement = Arrangement.spacedBy(16.dp)
   ) {
-    // Top Hero Header
+    // 1. Airy Header
     item {
       DashboardHeader(
         messName = uiState.messName,
@@ -95,93 +98,55 @@ fun DashboardScreen(
       )
     }
 
-    // Actionable Alerts Banner (if any tasks are pending)
-    if (uiState.unmarkedMealsToday.isNotEmpty() || uiState.missingMenuMealsToday.isNotEmpty() || uiState.currentMonthPendingPaise > 0) {
+    // 2. Subtle Alerts Chip (Non-bloated)
+    if (uiState.unmarkedMealsToday.isNotEmpty() || uiState.currentMonthPendingPaise > 0) {
       item {
-        ActionableAlertsBanner(
+        DashboardAlertChip(
           unmarkedMeals = uiState.unmarkedMealsToday.map { it.displayName },
-          missingMenuMeals = uiState.missingMenuMealsToday.map { it.displayName },
           pendingPaise = uiState.currentMonthPendingPaise,
           onMarkAttendance = onNavigateToAttendance,
-          onPlanMenu = onNavigateToMenu,
           onViewBills = onNavigateToReports
         )
       }
     }
 
-    // Key Stats Summary Cards
+    // 3. Hero Financial Pulse (Total Collection & Total Expense)
     item {
-      KeyMetricsOverview(
-        costPerMealRupees = uiState.currentMonthCostPerMealRupees,
-        totalMonthExpensesPaise = uiState.currentMonthTotalExpensePaise,
-        totalMonthMeals = uiState.currentMonthTotalMeals,
-        totalTodayMeals = uiState.totalTodayMeals
-      )
-    }
-
-    // Payment Collection Progress Card
-    item {
-      PaymentCollectionProgressCard(
-        totalBilledPaise = uiState.currentMonthBilledPaise,
-        totalCollectedPaise = uiState.currentMonthCollectedPaise,
-        totalPendingPaise = uiState.currentMonthPendingPaise,
+      HeroFinancialPulseCard(
+        formattedMonth = uiState.formattedMonth,
+        totalCollectionPaise = uiState.currentMonthCollectedPaise,
+        totalExpensePaise = uiState.currentMonthTotalExpensePaise,
+        pendingPaise = uiState.currentMonthPendingPaise,
         collectionPercentage = uiState.currentMonthCollectionPercentage,
+        costPerMealRupees = uiState.currentMonthCostPerMealRupees,
+        totalMeals = uiState.currentMonthTotalMeals,
         onViewBilling = onNavigateToReports
       )
     }
 
-    // Today's Attendance Card
+    // 4. Today's Meals & Menu
     item {
-      TodayAttendanceCard(
+      TodayKitchenOverviewCard(
         breakfastCount = uiState.todayBreakfastCount,
         lunchCount = uiState.todayLunchCount,
         dinnerCount = uiState.todayDinnerCount,
-        totalMeals = uiState.totalTodayMeals,
-        onTakeAttendance = onNavigateToAttendance
-      )
-    }
-
-    // Today's Menu Card
-    item {
-      TodayMenuCard(
+        totalTodayMeals = uiState.totalTodayMeals,
         breakfastMenu = uiState.todayBreakfastMenu?.description,
         lunchMenu = uiState.todayLunchMenu?.description,
         dinnerMenu = uiState.todayDinnerMenu?.description,
+        onTakeAttendance = onNavigateToAttendance,
         onManageMenu = onNavigateToMenu
       )
     }
 
-    // Current Month Financial & Cost per Meal Card
+    // 5. Spacious Quick Navigation Tiles
     item {
-      MonthlyFinancialCard(
-        formattedMonth = uiState.formattedMonth,
-        totalExpensePaise = uiState.currentMonthTotalExpensePaise,
-        totalMeals = uiState.currentMonthTotalMeals,
-        costPerMealRupees = uiState.currentMonthCostPerMealRupees,
-        onManageExpenses = onNavigateToExpenses,
-        onNavigateToReports = onNavigateToReports
-      )
-    }
-
-    // Recent Expenses Card (if available)
-    if (uiState.recentExpenses.isNotEmpty()) {
-      item {
-        RecentExpensesSnippetCard(
-          expenses = uiState.recentExpenses,
-          onViewAll = onNavigateToExpenses
-        )
-      }
-    }
-
-    // Quick Actions
-    item {
-      QuickActionsSection(
+      QuickNavigationGrid(
         onNavigateToAttendance = onNavigateToAttendance,
-        onNavigateToMenu = onNavigateToMenu,
+        onNavigateToReports = onNavigateToReports,
         onNavigateToExpenses = onNavigateToExpenses,
         onNavigateToEmployees = onNavigateToEmployees,
-        onNavigateToReports = onNavigateToReports,
-        onNavigateToSettings = onNavigateToSettings
+        onNavigateToMenu = onNavigateToMenu
       )
     }
 
@@ -199,220 +164,168 @@ private fun DashboardHeader(
   onNavigateToEmployees: () -> Unit,
   onNavigateToSettings: () -> Unit
 ) {
-  Card(
+  Row(
+    modifier = Modifier
+      .fillMaxWidth()
+      .padding(horizontal = 4.dp, vertical = 6.dp),
+    horizontalArrangement = Arrangement.SpaceBetween,
+    verticalAlignment = Alignment.CenterVertically
+  ) {
+    Column(modifier = Modifier.weight(1f)) {
+      Text(
+        text = messName.ifBlank { "Office Mess Manager" },
+        style = MaterialTheme.typography.titleLarge,
+        fontWeight = FontWeight.Bold,
+        color = MaterialTheme.colorScheme.onSurface,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis
+      )
+      Spacer(modifier = Modifier.height(2.dp))
+      Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(
+          imageVector = Icons.Default.CalendarMonth,
+          contentDescription = null,
+          modifier = Modifier.size(14.dp),
+          tint = MaterialTheme.colorScheme.primary
+        )
+        Spacer(modifier = Modifier.width(4.dp))
+        Text(
+          text = formattedDate,
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+      }
+    }
+
+    Row(verticalAlignment = Alignment.CenterVertically) {
+      // Active Staff Chip
+      Surface(
+        onClick = onNavigateToEmployees,
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
+        modifier = Modifier.testTag("btn_navigate_employees")
+      ) {
+        Row(
+          modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+          verticalAlignment = Alignment.CenterVertically
+        ) {
+          Icon(
+            imageVector = Icons.Default.People,
+            contentDescription = null,
+            modifier = Modifier.size(16.dp),
+            tint = MaterialTheme.colorScheme.onPrimaryContainer
+          )
+          Spacer(modifier = Modifier.width(4.dp))
+          Text(
+            text = "$activeEmployeeCount Staff",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onPrimaryContainer,
+            modifier = Modifier.testTag("active_employee_count")
+          )
+        }
+      }
+
+      Spacer(modifier = Modifier.width(6.dp))
+
+      IconButton(
+        onClick = onNavigateToSettings,
+        modifier = Modifier.testTag("dashboard_settings_button")
+      ) {
+        Icon(
+          imageVector = Icons.Default.Settings,
+          contentDescription = "Settings",
+          tint = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+      }
+    }
+  }
+}
+
+@Composable
+private fun DashboardAlertChip(
+  unmarkedMeals: List<String>,
+  pendingPaise: Long,
+  onMarkAttendance: () -> Unit,
+  onViewBills: () -> Unit
+) {
+  Surface(
     modifier = Modifier.fillMaxWidth(),
-    colors = CardDefaults.cardColors(
-      containerColor = MaterialTheme.colorScheme.primaryContainer
-    ),
-    shape = RoundedCornerShape(20.dp)
+    shape = RoundedCornerShape(12.dp),
+    color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f)
+  ) {
+    Row(
+      modifier = Modifier
+        .fillMaxWidth()
+        .padding(horizontal = 12.dp, vertical = 8.dp),
+      horizontalArrangement = Arrangement.SpaceBetween,
+      verticalAlignment = Alignment.CenterVertically
+    ) {
+      Row(
+        modifier = Modifier.weight(1f),
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        Icon(
+          imageVector = Icons.Default.Info,
+          contentDescription = null,
+          tint = MaterialTheme.colorScheme.onTertiaryContainer,
+          modifier = Modifier.size(16.dp)
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+          text = if (unmarkedMeals.isNotEmpty()) {
+            "Record ${unmarkedMeals.joinToString(", ")} attendance"
+          } else {
+            "${CurrencyUtils.formatPaise(pendingPaise)} dues left to collect"
+          },
+          style = MaterialTheme.typography.bodySmall,
+          fontWeight = FontWeight.Medium,
+          color = MaterialTheme.colorScheme.onTertiaryContainer,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis
+        )
+      }
+
+      TextButton(
+        onClick = if (unmarkedMeals.isNotEmpty()) onMarkAttendance else onViewBills,
+        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+      ) {
+        Text(
+          text = if (unmarkedMeals.isNotEmpty()) "Mark Now" else "Collect",
+          style = MaterialTheme.typography.labelSmall,
+          fontWeight = FontWeight.Bold
+        )
+      }
+    }
+  }
+}
+
+@Composable
+private fun HeroFinancialPulseCard(
+  formattedMonth: String,
+  totalCollectionPaise: Long,
+  totalExpensePaise: Long,
+  pendingPaise: Long,
+  collectionPercentage: Float,
+  costPerMealRupees: Double,
+  totalMeals: Int,
+  onViewBilling: () -> Unit
+) {
+  Card(
+    onClick = onViewBilling,
+    modifier = Modifier
+      .fillMaxWidth()
+      .testTag("btn_navigate_reports"),
+    shape = RoundedCornerShape(20.dp),
+    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
   ) {
     Column(
       modifier = Modifier
         .fillMaxWidth()
-        .padding(20.dp)
+        .padding(18.dp)
     ) {
-      Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-      ) {
-        Column(modifier = Modifier.weight(1f)) {
-          Text(
-            text = messName.ifBlank { "Office Mess Manager" },
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onPrimaryContainer
-          )
-          Spacer(modifier = Modifier.height(4.dp))
-          Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-              imageVector = Icons.Default.CalendarMonth,
-              contentDescription = null,
-              modifier = Modifier.size(16.dp),
-              tint = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
-            )
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(
-              text = formattedDate,
-              style = MaterialTheme.typography.bodyMedium,
-              color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f),
-              fontWeight = FontWeight.Medium
-            )
-          }
-        }
-
-        Row(verticalAlignment = Alignment.CenterVertically) {
-          IconButton(
-            onClick = onNavigateToSettings,
-            modifier = Modifier.testTag("dashboard_settings_button")
-          ) {
-            Icon(
-              imageVector = Icons.Default.Settings,
-              contentDescription = "Settings",
-              tint = MaterialTheme.colorScheme.onPrimaryContainer
-            )
-          }
-
-          Surface(
-            onClick = onNavigateToEmployees,
-            shape = RoundedCornerShape(12.dp),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 2.dp,
-            modifier = Modifier.testTag("btn_navigate_employees")
-          ) {
-            Row(
-              modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-              verticalAlignment = Alignment.CenterVertically
-            ) {
-              Icon(
-                imageVector = Icons.Default.People,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(16.dp)
-              )
-              Spacer(modifier = Modifier.width(4.dp))
-              Column {
-                Text(
-                  text = "$activeEmployeeCount Active",
-                  style = MaterialTheme.typography.labelMedium,
-                  fontWeight = FontWeight.Bold,
-                  color = MaterialTheme.colorScheme.onSurface,
-                  modifier = Modifier.testTag("active_employee_count")
-                )
-                Text(
-                  text = "Staff",
-                  style = MaterialTheme.typography.labelSmall,
-                  color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-}
-
-@Composable
-private fun ActionableAlertsBanner(
-  unmarkedMeals: List<String>,
-  missingMenuMeals: List<String>,
-  pendingPaise: Long,
-  onMarkAttendance: () -> Unit,
-  onPlanMenu: () -> Unit,
-  onViewBills: () -> Unit
-) {
-  Card(
-    modifier = Modifier.fillMaxWidth(),
-    shape = RoundedCornerShape(16.dp),
-    colors = CardDefaults.cardColors(
-      containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.7f)
-    )
-  ) {
-    Column(modifier = Modifier.padding(14.dp)) {
-      Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(
-          Icons.Default.NotificationsActive,
-          contentDescription = null,
-          tint = MaterialTheme.colorScheme.onErrorContainer,
-          modifier = Modifier.size(20.dp)
-        )
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-          "Action Items & Alerts",
-          style = MaterialTheme.typography.titleSmall,
-          fontWeight = FontWeight.Bold,
-          color = MaterialTheme.colorScheme.onErrorContainer
-        )
-      }
-
-      if (unmarkedMeals.isNotEmpty()) {
-        Spacer(modifier = Modifier.height(8.dp))
-        Row(
-          modifier = Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.SpaceBetween,
-          verticalAlignment = Alignment.CenterVertically
-        ) {
-          Text(
-            text = "• Today's ${unmarkedMeals.joinToString(", ")} attendance not recorded",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onErrorContainer,
-            modifier = Modifier.weight(1f)
-          )
-          OutlinedButton(
-            onClick = onMarkAttendance,
-            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-            shape = RoundedCornerShape(6.dp)
-          ) {
-            Text("Mark", style = MaterialTheme.typography.labelSmall)
-          }
-        }
-      }
-
-      if (missingMenuMeals.isNotEmpty()) {
-        Spacer(modifier = Modifier.height(4.dp))
-        Row(
-          modifier = Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.SpaceBetween,
-          verticalAlignment = Alignment.CenterVertically
-        ) {
-          Text(
-            text = "• Menu unassigned for ${missingMenuMeals.joinToString(", ")}",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onErrorContainer,
-            modifier = Modifier.weight(1f)
-          )
-          OutlinedButton(
-            onClick = onPlanMenu,
-            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-            shape = RoundedCornerShape(6.dp)
-          ) {
-            Text("Plan", style = MaterialTheme.typography.labelSmall)
-          }
-        }
-      }
-
-      if (pendingPaise > 0) {
-        Spacer(modifier = Modifier.height(4.dp))
-        Row(
-          modifier = Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.SpaceBetween,
-          verticalAlignment = Alignment.CenterVertically
-        ) {
-          Text(
-            text = "• ${CurrencyUtils.formatPaise(pendingPaise)} outstanding dues for this month",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onErrorContainer,
-            modifier = Modifier.weight(1f)
-          )
-          OutlinedButton(
-            onClick = onViewBills,
-            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-            shape = RoundedCornerShape(6.dp)
-          ) {
-            Text("Collect", style = MaterialTheme.typography.labelSmall)
-          }
-        }
-      }
-    }
-  }
-}
-
-@Composable
-private fun PaymentCollectionProgressCard(
-  totalBilledPaise: Long,
-  totalCollectedPaise: Long,
-  totalPendingPaise: Long,
-  collectionPercentage: Float,
-  onViewBilling: () -> Unit
-) {
-  Card(
-    modifier = Modifier.fillMaxWidth(),
-    shape = RoundedCornerShape(16.dp),
-    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-  ) {
-    Column(modifier = Modifier.padding(16.dp)) {
+      // Header
       Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -420,73 +333,189 @@ private fun PaymentCollectionProgressCard(
       ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
           Icon(
-            imageVector = Icons.Default.Payment,
+            imageVector = Icons.Default.Payments,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.primary,
             modifier = Modifier.size(20.dp)
           )
           Spacer(modifier = Modifier.width(8.dp))
           Text(
-            "Payment Collection",
+            text = "Financial Overview",
             style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface
           )
         }
 
         Surface(
           shape = RoundedCornerShape(8.dp),
-          color = if (collectionPercentage >= 80f) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.tertiaryContainer
+          color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
         ) {
           Text(
-            text = String.format(java.util.Locale.US, "%.0f%% Collected", collectionPercentage),
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            text = formattedMonth,
             style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Bold,
-            color = if (collectionPercentage >= 80f) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onTertiaryContainer
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
           )
         }
       }
 
-      Spacer(modifier = Modifier.height(10.dp))
+      Spacer(modifier = Modifier.height(16.dp))
 
-      LinearProgressIndicator(
-        progress = { (collectionPercentage / 100f).coerceIn(0f, 1f) },
-        modifier = Modifier
-          .fillMaxWidth()
-          .height(8.dp)
-          .clip(RoundedCornerShape(4.dp))
-      )
-
-      Spacer(modifier = Modifier.height(12.dp))
-
+      // Total Collection vs Total Expense Row
       Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+      ) {
+        // Total Collection
+        Surface(
+          modifier = Modifier.weight(1f),
+          shape = RoundedCornerShape(14.dp),
+          color = Color(0xFFE8F5E9)
+        ) {
+          Column(modifier = Modifier.padding(14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+              Icon(
+                imageVector = Icons.AutoMirrored.Filled.TrendingUp,
+                contentDescription = null,
+                tint = Color(0xFF2E7D32),
+                modifier = Modifier.size(16.dp)
+              )
+              Spacer(modifier = Modifier.width(4.dp))
+              Text(
+                text = "Total Collection",
+                style = MaterialTheme.typography.labelSmall,
+                color = Color(0xFF1B5E20),
+                fontWeight = FontWeight.Medium
+              )
+            }
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+              text = CurrencyUtils.formatPaise(totalCollectionPaise),
+              style = MaterialTheme.typography.titleLarge,
+              fontWeight = FontWeight.Bold,
+              color = Color(0xFF1B5E20)
+            )
+          }
+        }
+
+        // Total Expense
+        Surface(
+          modifier = Modifier.weight(1f),
+          shape = RoundedCornerShape(14.dp),
+          color = Color(0xFFFFF3E0)
+        ) {
+          Column(modifier = Modifier.padding(14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+              Icon(
+                imageVector = Icons.AutoMirrored.Filled.ReceiptLong,
+                contentDescription = null,
+                tint = Color(0xFFD84315),
+                modifier = Modifier.size(16.dp)
+              )
+              Spacer(modifier = Modifier.width(4.dp))
+              Text(
+                text = "Total Expense",
+                style = MaterialTheme.typography.labelSmall,
+                color = Color(0xFFBF360C),
+                fontWeight = FontWeight.Medium
+              )
+            }
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+              text = CurrencyUtils.formatPaise(totalExpensePaise),
+              style = MaterialTheme.typography.titleLarge,
+              fontWeight = FontWeight.Bold,
+              color = Color(0xFFBF360C),
+              modifier = Modifier.testTag("monthly_expenses")
+            )
+          }
+        }
+      }
+
+      Spacer(modifier = Modifier.height(14.dp))
+
+      // Progress Bar of Collection
+      Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+          Text(
+            text = "Collection Rate: ${String.format(java.util.Locale.US, "%.0f%%", collectionPercentage)}",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+          )
+          Text(
+            text = "Left to Collect: ${CurrencyUtils.formatPaise(pendingPaise)}",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = if (pendingPaise > 0) MaterialTheme.colorScheme.error else Color(0xFF2E7D32)
+          )
+        }
+        Spacer(modifier = Modifier.height(6.dp))
+        LinearProgressIndicator(
+          progress = { (collectionPercentage / 100f).coerceIn(0f, 1f) },
+          modifier = Modifier
+            .fillMaxWidth()
+            .height(6.dp)
+            .clip(RoundedCornerShape(3.dp)),
+          color = Color(0xFF2E7D32),
+          trackColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+      }
+
+      Spacer(modifier = Modifier.height(12.dp))
+      HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+      Spacer(modifier = Modifier.height(12.dp))
+
+      // Bottom Row: Cost per meal + Total Meals + View Bills Action
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
       ) {
         Column {
-          Text("Collected", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
           Text(
-            CurrencyUtils.formatPaise(totalCollectedPaise),
-            style = MaterialTheme.typography.bodyMedium,
+            text = "Cost per Meal",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+          )
+          Row(verticalAlignment = Alignment.Bottom) {
+            Text(
+              text = CurrencyUtils.formatRupees(costPerMealRupees),
+              style = MaterialTheme.typography.titleMedium,
+              fontWeight = FontWeight.Bold,
+              color = MaterialTheme.colorScheme.primary,
+              modifier = Modifier.testTag("cost_per_meal")
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+              text = "($totalMeals meals)",
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+              modifier = Modifier.testTag("monthly_meals")
+            )
+          }
+        }
+
+        Row(
+          verticalAlignment = Alignment.CenterVertically,
+          modifier = Modifier.padding(start = 8.dp)
+        ) {
+          Text(
+            text = "View Ledger",
+            style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.primary
           )
-        }
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-          Text("Outstanding", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-          Text(
-            CurrencyUtils.formatPaise(totalPendingPaise),
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Bold,
-            color = if (totalPendingPaise > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
-          )
-        }
-        Column(horizontalAlignment = Alignment.End) {
-          Text("Total Bill", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-          Text(
-            CurrencyUtils.formatPaise(totalBilledPaise),
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Bold
+          Icon(
+            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(16.dp)
           )
         }
       }
@@ -495,143 +524,27 @@ private fun PaymentCollectionProgressCard(
 }
 
 @Composable
-private fun KeyMetricsOverview(
-  costPerMealRupees: Double,
-  totalMonthExpensesPaise: Long,
-  totalMonthMeals: Int,
-  totalTodayMeals: Int
-) {
-  Row(
-    modifier = Modifier.fillMaxWidth(),
-    horizontalArrangement = Arrangement.spacedBy(12.dp)
-  ) {
-    // Cost per Meal Metric Card
-    ElevatedCard(
-      modifier = Modifier.weight(1f),
-      shape = RoundedCornerShape(16.dp),
-      colors = CardDefaults.elevatedCardColors(
-        containerColor = MaterialTheme.colorScheme.surface
-      )
-    ) {
-      Column(
-        modifier = Modifier
-          .fillMaxWidth()
-          .padding(14.dp)
-      ) {
-        Row(
-          modifier = Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.SpaceBetween,
-          verticalAlignment = Alignment.CenterVertically
-        ) {
-          Box(
-            modifier = Modifier
-              .size(36.dp)
-              .clip(CircleShape)
-              .background(MaterialTheme.colorScheme.secondaryContainer),
-            contentAlignment = Alignment.Center
-          ) {
-            Icon(
-              imageVector = Icons.AutoMirrored.Filled.TrendingUp,
-              contentDescription = null,
-              tint = MaterialTheme.colorScheme.onSecondaryContainer,
-              modifier = Modifier.size(20.dp)
-            )
-          }
-          Text(
-            text = "This Month",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-          )
-        }
-        Spacer(modifier = Modifier.height(10.dp))
-        Text(
-          text = if (totalMonthMeals > 0) CurrencyUtils.formatRupees(costPerMealRupees) else "₹0.00",
-          style = MaterialTheme.typography.titleLarge,
-          fontWeight = FontWeight.Bold,
-          color = MaterialTheme.colorScheme.primary,
-          modifier = Modifier.testTag("cost_per_meal")
-        )
-        Text(
-          text = "Cost per Meal",
-          style = MaterialTheme.typography.labelMedium,
-          color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-      }
-    }
-
-    // Today's Meals Metric Card
-    ElevatedCard(
-      modifier = Modifier.weight(1f),
-      shape = RoundedCornerShape(16.dp),
-      colors = CardDefaults.elevatedCardColors(
-        containerColor = MaterialTheme.colorScheme.surface
-      )
-    ) {
-      Column(
-        modifier = Modifier
-          .fillMaxWidth()
-          .padding(14.dp)
-      ) {
-        Row(
-          modifier = Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.SpaceBetween,
-          verticalAlignment = Alignment.CenterVertically
-        ) {
-          Box(
-            modifier = Modifier
-              .size(36.dp)
-              .clip(CircleShape)
-              .background(MaterialTheme.colorScheme.tertiaryContainer),
-            contentAlignment = Alignment.Center
-          ) {
-            Icon(
-              imageVector = Icons.Default.Restaurant,
-              contentDescription = null,
-              tint = MaterialTheme.colorScheme.onTertiaryContainer,
-              modifier = Modifier.size(20.dp)
-            )
-          }
-          Text(
-            text = "Today",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-          )
-        }
-        Spacer(modifier = Modifier.height(10.dp))
-        Text(
-          text = "$totalTodayMeals",
-          style = MaterialTheme.typography.titleLarge,
-          fontWeight = FontWeight.Bold,
-          color = MaterialTheme.colorScheme.tertiary,
-          modifier = Modifier.testTag("today_total_meals")
-        )
-        Text(
-          text = "Total Meals Today",
-          style = MaterialTheme.typography.labelMedium,
-          color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-      }
-    }
-  }
-}
-
-@Composable
-private fun TodayAttendanceCard(
+private fun TodayKitchenOverviewCard(
   breakfastCount: Int,
   lunchCount: Int,
   dinnerCount: Int,
-  totalMeals: Int,
-  onTakeAttendance: () -> Unit
+  totalTodayMeals: Int,
+  breakfastMenu: String?,
+  lunchMenu: String?,
+  dinnerMenu: String?,
+  onTakeAttendance: () -> Unit,
+  onManageMenu: () -> Unit
 ) {
   Card(
     modifier = Modifier.fillMaxWidth(),
-    shape = RoundedCornerShape(16.dp),
-    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    shape = RoundedCornerShape(20.dp),
+    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+    elevation = CardDefaults.cardElevation(defaultElevation = 1.5.dp)
   ) {
     Column(
       modifier = Modifier
         .fillMaxWidth()
-        .padding(16.dp)
+        .padding(18.dp)
     ) {
       Row(
         modifier = Modifier.fillMaxWidth(),
@@ -640,116 +553,175 @@ private fun TodayAttendanceCard(
       ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
           Icon(
-            imageVector = Icons.Default.CheckCircle,
+            imageVector = Icons.Default.Restaurant,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(22.dp)
+            modifier = Modifier.size(20.dp)
           )
           Spacer(modifier = Modifier.width(8.dp))
           Text(
-            text = "Today's Meal Attendance",
+            text = "Today's Kitchen",
             style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface
           )
         }
 
         Surface(
           shape = RoundedCornerShape(8.dp),
-          color = MaterialTheme.colorScheme.secondaryContainer
+          color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
         ) {
           Text(
-            text = "$totalMeals served",
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            text = "$totalTodayMeals Served",
             style = MaterialTheme.typography.labelSmall,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSecondaryContainer
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier
+              .padding(horizontal = 8.dp, vertical = 4.dp)
+              .testTag("today_total_meals")
           )
         }
       }
 
       Spacer(modifier = Modifier.height(14.dp))
 
-      // Breakdown in 3 meal columns
+      // 3 Meal Attendance Badges
       Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
       ) {
-        MealAttendanceItem(
+        MealHeadcountPill(
           title = "Breakfast",
           count = breakfastCount,
           icon = Icons.Default.FreeBreakfast,
-          testTag = "today_breakfast_count",
+          accentColor = BreakfastAccent,
+          containerColor = BreakfastContainerLight,
           modifier = Modifier.weight(1f)
         )
-        MealAttendanceItem(
+        MealHeadcountPill(
           title = "Lunch",
           count = lunchCount,
           icon = Icons.Default.LunchDining,
-          testTag = "today_lunch_count",
+          accentColor = LunchAccent,
+          containerColor = LunchContainerLight,
           modifier = Modifier.weight(1f)
         )
-        MealAttendanceItem(
+        MealHeadcountPill(
           title = "Dinner",
           count = dinnerCount,
           icon = Icons.Default.DinnerDining,
-          testTag = "today_dinner_count",
+          accentColor = DinnerAccent,
+          containerColor = DinnerContainerLight,
           modifier = Modifier.weight(1f)
         )
       }
 
       Spacer(modifier = Modifier.height(14.dp))
 
-      Button(
-        onClick = onTakeAttendance,
-        modifier = Modifier
-          .fillMaxWidth()
-          .testTag("btn_navigate_attendance"),
-        shape = RoundedCornerShape(10.dp)
+      // Today's Menu Highlight
+      Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
       ) {
-        Icon(
-          imageVector = Icons.Default.Restaurant,
-          contentDescription = null,
-          modifier = Modifier.size(18.dp)
-        )
-        Spacer(modifier = Modifier.width(8.dp))
-        Text("Mark Attendance")
+        Column(modifier = Modifier.padding(12.dp)) {
+          Text(
+            text = "Today's Menu",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+          )
+          Spacer(modifier = Modifier.height(4.dp))
+          Text(
+            text = when {
+              !lunchMenu.isNullOrBlank() -> "Lunch: $lunchMenu"
+              !dinnerMenu.isNullOrBlank() -> "Dinner: $dinnerMenu"
+              !breakfastMenu.isNullOrBlank() -> "Breakfast: $breakfastMenu"
+              else -> "No menu items planned for today yet"
+            },
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+          )
+        }
+      }
+
+      Spacer(modifier = Modifier.height(14.dp))
+
+      // Action Buttons
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+      ) {
+        Button(
+          onClick = onTakeAttendance,
+          modifier = Modifier
+            .weight(1f)
+            .testTag("btn_navigate_attendance"),
+          shape = RoundedCornerShape(12.dp)
+        ) {
+          Icon(
+            imageVector = Icons.Default.CheckCircle,
+            contentDescription = null,
+            modifier = Modifier.size(16.dp)
+          )
+          Spacer(modifier = Modifier.width(6.dp))
+          Text(text = "Attendance", style = MaterialTheme.typography.labelMedium)
+        }
+
+        OutlinedButton(
+          onClick = onManageMenu,
+          modifier = Modifier
+            .weight(1f)
+            .testTag("btn_navigate_menu"),
+          shape = RoundedCornerShape(12.dp)
+        ) {
+          Icon(
+            imageVector = Icons.Default.RestaurantMenu,
+            contentDescription = null,
+            modifier = Modifier.size(16.dp)
+          )
+          Spacer(modifier = Modifier.width(6.dp))
+          Text(text = "Menu", style = MaterialTheme.typography.labelMedium)
+        }
       }
     }
   }
 }
 
 @Composable
-private fun MealAttendanceItem(
+private fun MealHeadcountPill(
   title: String,
   count: Int,
   icon: ImageVector,
-  testTag: String,
+  accentColor: Color,
+  containerColor: Color,
   modifier: Modifier = Modifier
 ) {
   Surface(
     modifier = modifier,
     shape = RoundedCornerShape(12.dp),
-    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+    color = containerColor.copy(alpha = 0.5f)
   ) {
     Column(
       modifier = Modifier
         .fillMaxWidth()
-        .padding(10.dp),
+        .padding(vertical = 10.dp, horizontal = 8.dp),
       horizontalAlignment = Alignment.CenterHorizontally
     ) {
       Icon(
         imageVector = icon,
         contentDescription = null,
-        tint = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.size(20.dp)
+        tint = accentColor,
+        modifier = Modifier.size(18.dp)
       )
       Spacer(modifier = Modifier.height(4.dp))
       Text(
         text = "$count",
-        style = MaterialTheme.typography.titleLarge,
+        style = MaterialTheme.typography.titleMedium,
         fontWeight = FontWeight.Bold,
-        color = MaterialTheme.colorScheme.onSurface,
-        modifier = Modifier.testTag(testTag)
+        color = MaterialTheme.colorScheme.onSurface
       )
       Text(
         text = title,
@@ -761,444 +733,72 @@ private fun MealAttendanceItem(
 }
 
 @Composable
-private fun TodayMenuCard(
-  breakfastMenu: String?,
-  lunchMenu: String?,
-  dinnerMenu: String?,
-  onManageMenu: () -> Unit
-) {
-  Card(
-    modifier = Modifier.fillMaxWidth(),
-    shape = RoundedCornerShape(16.dp),
-    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-  ) {
-    Column(
-      modifier = Modifier
-        .fillMaxWidth()
-        .padding(16.dp)
-    ) {
-      Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-      ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-          Icon(
-            imageVector = Icons.Default.RestaurantMenu,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(22.dp)
-          )
-          Spacer(modifier = Modifier.width(8.dp))
-          Text(
-            text = "Today's Menu",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold
-          )
-        }
-
-        OutlinedButton(
-          onClick = onManageMenu,
-          modifier = Modifier.testTag("btn_navigate_menu"),
-          contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-          shape = RoundedCornerShape(8.dp)
-        ) {
-          Text("Manage Menu", style = MaterialTheme.typography.labelSmall)
-          Spacer(modifier = Modifier.width(4.dp))
-          Icon(
-            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-            contentDescription = null,
-            modifier = Modifier.size(14.dp)
-          )
-        }
-      }
-
-      Spacer(modifier = Modifier.height(12.dp))
-
-      // Breakfast Row
-      MenuRowItem(
-        label = "Breakfast",
-        description = breakfastMenu,
-        icon = Icons.Default.FreeBreakfast,
-        testTag = "today_breakfast_menu"
-      )
-
-      HorizontalDivider(
-        modifier = Modifier.padding(vertical = 8.dp),
-        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-      )
-
-      // Lunch Row
-      MenuRowItem(
-        label = "Lunch",
-        description = lunchMenu,
-        icon = Icons.Default.LunchDining,
-        testTag = "today_lunch_menu"
-      )
-
-      HorizontalDivider(
-        modifier = Modifier.padding(vertical = 8.dp),
-        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-      )
-
-      // Dinner Row
-      MenuRowItem(
-        label = "Dinner",
-        description = dinnerMenu,
-        icon = Icons.Default.DinnerDining,
-        testTag = "today_dinner_menu"
-      )
-    }
-  }
-}
-
-@Composable
-private fun MenuRowItem(
-  label: String,
-  description: String?,
-  icon: ImageVector,
-  testTag: String
-) {
-  Row(
-    modifier = Modifier.fillMaxWidth(),
-    verticalAlignment = Alignment.Top
-  ) {
-    Box(
-      modifier = Modifier
-        .size(28.dp)
-        .clip(CircleShape)
-        .background(MaterialTheme.colorScheme.surfaceVariant),
-      contentAlignment = Alignment.Center
-    ) {
-      Icon(
-        imageVector = icon,
-        contentDescription = null,
-        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.size(16.dp)
-      )
-    }
-    Spacer(modifier = Modifier.width(10.dp))
-    Column(modifier = Modifier.weight(1f)) {
-      Text(
-        text = label,
-        style = MaterialTheme.typography.labelMedium,
-        fontWeight = FontWeight.Bold,
-        color = MaterialTheme.colorScheme.primary
-      )
-      Spacer(modifier = Modifier.height(2.dp))
-      Text(
-        text = if (description.isNullOrBlank()) "No menu planned yet" else description,
-        style = MaterialTheme.typography.bodyMedium,
-        color = if (description.isNullOrBlank()) {
-          MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-        } else {
-          MaterialTheme.colorScheme.onSurface
-        },
-        maxLines = 2,
-        overflow = TextOverflow.Ellipsis,
-        modifier = Modifier.testTag(testTag)
-      )
-    }
-  }
-}
-
-@Composable
-private fun MonthlyFinancialCard(
-  formattedMonth: String,
-  totalExpensePaise: Long,
-  totalMeals: Int,
-  costPerMealRupees: Double,
-  onManageExpenses: () -> Unit,
-  onNavigateToReports: () -> Unit
-) {
-  Card(
-    modifier = Modifier.fillMaxWidth(),
-    shape = RoundedCornerShape(16.dp),
-    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-  ) {
-    Column(
-      modifier = Modifier
-        .fillMaxWidth()
-        .padding(16.dp)
-    ) {
-      Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-      ) {
-        Row(
-          modifier = Modifier.weight(1f, fill = false),
-          verticalAlignment = Alignment.CenterVertically
-        ) {
-          Icon(
-            imageVector = Icons.Default.AccountBalanceWallet,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(22.dp)
-          )
-          Spacer(modifier = Modifier.width(8.dp))
-          Text(
-            text = "Financials ($formattedMonth)",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-          )
-        }
-
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-          OutlinedButton(
-            onClick = onManageExpenses,
-            modifier = Modifier.testTag("btn_navigate_expenses"),
-            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-            shape = RoundedCornerShape(8.dp)
-          ) {
-            Text("Expenses", style = MaterialTheme.typography.labelSmall)
-            Spacer(modifier = Modifier.width(2.dp))
-            Icon(
-              imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-              contentDescription = null,
-              modifier = Modifier.size(12.dp)
-            )
-          }
-
-          Button(
-            onClick = onNavigateToReports,
-            modifier = Modifier.testTag("btn_navigate_reports"),
-            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-            shape = RoundedCornerShape(8.dp)
-          ) {
-            Text("Reports", style = MaterialTheme.typography.labelSmall)
-            Spacer(modifier = Modifier.width(2.dp))
-            Icon(
-              imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-              contentDescription = null,
-              modifier = Modifier.size(12.dp)
-            )
-          }
-        }
-      }
-
-      Spacer(modifier = Modifier.height(14.dp))
-
-      // Stats row
-      Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-      ) {
-        OutlinedCard(
-          modifier = Modifier.weight(1f),
-          shape = RoundedCornerShape(12.dp)
-        ) {
-          Column(modifier = Modifier.padding(12.dp)) {
-            Text(
-              text = "Total Expenses",
-              style = MaterialTheme.typography.labelSmall,
-              color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-              text = CurrencyUtils.formatPaise(totalExpensePaise),
-              style = MaterialTheme.typography.titleMedium,
-              fontWeight = FontWeight.Bold,
-              color = MaterialTheme.colorScheme.onSurface,
-              modifier = Modifier.testTag("monthly_expenses")
-            )
-          }
-        }
-
-        OutlinedCard(
-          modifier = Modifier.weight(1f),
-          shape = RoundedCornerShape(12.dp)
-        ) {
-          Column(modifier = Modifier.padding(12.dp)) {
-            Text(
-              text = "Total Meals Served",
-              style = MaterialTheme.typography.labelSmall,
-              color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-              text = "$totalMeals meals",
-              style = MaterialTheme.typography.titleMedium,
-              fontWeight = FontWeight.Bold,
-              color = MaterialTheme.colorScheme.onSurface,
-              modifier = Modifier.testTag("monthly_meals")
-            )
-          }
-        }
-      }
-
-      Spacer(modifier = Modifier.height(12.dp))
-
-      // Cost calculation highlight card
-      Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
-      ) {
-        Row(
-          modifier = Modifier
-            .fillMaxWidth()
-            .padding(12.dp),
-          horizontalArrangement = Arrangement.SpaceBetween,
-          verticalAlignment = Alignment.CenterVertically
-        ) {
-          Column(modifier = Modifier.weight(1f)) {
-            Text(
-              text = "Shared Cost per Meal",
-              style = MaterialTheme.typography.labelMedium,
-              fontWeight = FontWeight.SemiBold,
-              color = MaterialTheme.colorScheme.onPrimaryContainer
-            )
-            Text(
-              text = if (totalMeals > 0) {
-                "${CurrencyUtils.formatPaise(totalExpensePaise)} ÷ $totalMeals meals"
-              } else {
-                "No meals served yet this month"
-              },
-              style = MaterialTheme.typography.bodySmall,
-              color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-            )
-          }
-
-          Text(
-            text = if (totalMeals > 0) CurrencyUtils.formatRupees(costPerMealRupees) else "₹0.00",
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary
-          )
-        }
-      }
-    }
-  }
-}
-
-@Composable
-private fun RecentExpensesSnippetCard(
-  expenses: List<Expense>,
-  onViewAll: () -> Unit
-) {
-  Card(
-    modifier = Modifier.fillMaxWidth(),
-    shape = RoundedCornerShape(16.dp),
-    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-  ) {
-    Column(modifier = Modifier.padding(16.dp)) {
-      Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-      ) {
-        Text(
-          "Recent Expenses",
-          style = MaterialTheme.typography.titleMedium,
-          fontWeight = FontWeight.SemiBold
-        )
-        TextButton(onClick = onViewAll) {
-          Text("View All", style = MaterialTheme.typography.labelSmall)
-        }
-      }
-
-      expenses.forEachIndexed { index, exp ->
-        if (index > 0) {
-          HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
-        }
-        Row(
-          modifier = Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.SpaceBetween,
-          verticalAlignment = Alignment.CenterVertically
-        ) {
-          Column(modifier = Modifier.weight(1f)) {
-            Text(
-              text = exp.description,
-              style = MaterialTheme.typography.bodyMedium,
-              fontWeight = FontWeight.Medium,
-              maxLines = 1,
-              overflow = TextOverflow.Ellipsis
-            )
-            Text(
-              text = "${exp.date} • ${exp.category.displayName}",
-              style = MaterialTheme.typography.bodySmall,
-              color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-          }
-          Text(
-            text = CurrencyUtils.formatPaise(exp.amountPaise),
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary
-          )
-        }
-      }
-    }
-  }
-}
-
-@Composable
-private fun QuickActionsSection(
+private fun QuickNavigationGrid(
   onNavigateToAttendance: () -> Unit,
-  onNavigateToMenu: () -> Unit,
+  onNavigateToReports: () -> Unit,
   onNavigateToExpenses: () -> Unit,
   onNavigateToEmployees: () -> Unit,
-  onNavigateToReports: () -> Unit,
-  onNavigateToSettings: () -> Unit
+  onNavigateToMenu: () -> Unit
 ) {
-  Column(modifier = Modifier.fillMaxWidth()) {
+  Column(
+    modifier = Modifier.fillMaxWidth(),
+    verticalArrangement = Arrangement.spacedBy(10.dp)
+  ) {
     Text(
-      text = "Quick Navigation",
-      style = MaterialTheme.typography.titleMedium,
-      fontWeight = FontWeight.SemiBold,
-      color = MaterialTheme.colorScheme.onSurface
+      text = "Quick Actions",
+      style = MaterialTheme.typography.titleSmall,
+      fontWeight = FontWeight.Bold,
+      color = MaterialTheme.colorScheme.onSurfaceVariant,
+      modifier = Modifier.padding(start = 4.dp)
     )
-    Spacer(modifier = Modifier.height(10.dp))
 
     Row(
       modifier = Modifier.fillMaxWidth(),
-      horizontalArrangement = Arrangement.spacedBy(8.dp)
+      horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-      QuickActionButton(
-        label = "Attendance",
+      QuickActionTile(
+        title = "Mark Meals",
+        subtitle = "Daily Check-in",
         icon = Icons.Default.Restaurant,
+        containerColor = MaterialTheme.colorScheme.primaryContainer,
+        iconTint = MaterialTheme.colorScheme.primary,
         onClick = onNavigateToAttendance,
         modifier = Modifier.weight(1f)
       )
-      QuickActionButton(
-        label = "Menu",
-        icon = Icons.Default.RestaurantMenu,
-        onClick = onNavigateToMenu,
-        modifier = Modifier.weight(1f)
-      )
-      QuickActionButton(
-        label = "Expenses",
-        icon = Icons.AutoMirrored.Filled.ReceiptLong,
-        onClick = onNavigateToExpenses,
+
+      QuickActionTile(
+        title = "Deposits & Bills",
+        subtitle = "Collections & Dues",
+        icon = Icons.Default.Assessment,
+        containerColor = Color(0xFFE8F5E9),
+        iconTint = Color(0xFF2E7D32),
+        onClick = onNavigateToReports,
         modifier = Modifier.weight(1f)
       )
     }
 
-    Spacer(modifier = Modifier.height(8.dp))
-
     Row(
       modifier = Modifier.fillMaxWidth(),
-      horizontalArrangement = Arrangement.spacedBy(8.dp)
+      horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-      QuickActionButton(
-        label = "Staff Directory",
-        icon = Icons.Default.Badge,
-        onClick = onNavigateToEmployees,
+      QuickActionTile(
+        title = "Add Expense",
+        subtitle = "Groceries & Bills",
+        icon = Icons.AutoMirrored.Filled.ReceiptLong,
+        containerColor = Color(0xFFFFF3E0),
+        iconTint = Color(0xFFE65100),
+        onClick = onNavigateToExpenses,
+        testTag = "btn_navigate_expenses",
         modifier = Modifier.weight(1f)
       )
-      QuickActionButton(
-        label = "Billing & Dues",
-        icon = Icons.Default.Assessment,
-        onClick = onNavigateToReports,
-        modifier = Modifier.weight(1f)
-      )
-      QuickActionButton(
-        label = "Settings",
-        icon = Icons.Default.Settings,
-        onClick = onNavigateToSettings,
+
+      QuickActionTile(
+        title = "Food Menu",
+        subtitle = "Weekly Schedule",
+        icon = Icons.Default.RestaurantMenu,
+        containerColor = Color(0xFFEDE7F6),
+        iconTint = Color(0xFF512DA8),
+        onClick = onNavigateToMenu,
         modifier = Modifier.weight(1f)
       )
     }
@@ -1206,39 +806,63 @@ private fun QuickActionsSection(
 }
 
 @Composable
-private fun QuickActionButton(
-  label: String,
+private fun QuickActionTile(
+  title: String,
+  subtitle: String,
   icon: ImageVector,
+  containerColor: Color,
+  iconTint: Color,
   onClick: () -> Unit,
-  modifier: Modifier = Modifier
+  modifier: Modifier = Modifier,
+  testTag: String? = null
 ) {
-  OutlinedButton(
+  Card(
     onClick = onClick,
-    modifier = modifier.height(68.dp),
-    shape = RoundedCornerShape(12.dp),
-    contentPadding = PaddingValues(4.dp),
-    colors = ButtonDefaults.outlinedButtonColors(
-      containerColor = MaterialTheme.colorScheme.surface
-    )
+    modifier = if (testTag != null) modifier.testTag(testTag) else modifier,
+    shape = RoundedCornerShape(16.dp),
+    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
   ) {
-    Column(
-      horizontalAlignment = Alignment.CenterHorizontally,
-      verticalArrangement = Arrangement.Center
+    Row(
+      modifier = Modifier
+        .fillMaxWidth()
+        .padding(14.dp),
+      verticalAlignment = Alignment.CenterVertically
     ) {
-      Icon(
-        imageVector = icon,
-        contentDescription = null,
-        modifier = Modifier.size(20.dp),
-        tint = MaterialTheme.colorScheme.primary
-      )
-      Spacer(modifier = Modifier.height(4.dp))
-      Text(
-        text = label,
-        style = MaterialTheme.typography.labelSmall,
-        fontWeight = FontWeight.Medium,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis
-      )
+      Box(
+        modifier = Modifier
+          .size(40.dp)
+          .clip(CircleShape)
+          .background(containerColor.copy(alpha = 0.6f)),
+        contentAlignment = Alignment.Center
+      ) {
+        Icon(
+          imageVector = icon,
+          contentDescription = null,
+          tint = iconTint,
+          modifier = Modifier.size(20.dp)
+        )
+      }
+
+      Spacer(modifier = Modifier.width(10.dp))
+
+      Column(modifier = Modifier.weight(1f)) {
+        Text(
+          text = title,
+          style = MaterialTheme.typography.labelLarge,
+          fontWeight = FontWeight.Bold,
+          color = MaterialTheme.colorScheme.onSurface,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis
+        )
+        Text(
+          text = subtitle,
+          style = MaterialTheme.typography.labelSmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis
+        )
+      }
     }
   }
 }

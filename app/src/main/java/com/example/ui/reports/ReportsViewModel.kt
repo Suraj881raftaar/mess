@@ -50,6 +50,9 @@ class ReportsViewModel(
   private val _showOnlyWithMeals = MutableStateFlow(false)
   val showOnlyWithMeals: StateFlow<Boolean> = _showOnlyWithMeals.asStateFlow()
 
+  private val _paymentFilter = MutableStateFlow(PaymentFilterTab.ALL)
+  val paymentFilter: StateFlow<PaymentFilterTab> = _paymentFilter.asStateFlow()
+
   private val _selectedEmployeeDetail = MutableStateFlow<EmployeeReportItem?>(null)
   val selectedEmployeeDetail: StateFlow<EmployeeReportItem?> = _selectedEmployeeDetail.asStateFlow()
 
@@ -85,6 +88,10 @@ class ReportsViewModel(
 
   fun setShowOnlyWithMeals(show: Boolean) {
     _showOnlyWithMeals.value = show
+  }
+
+  fun setPaymentFilter(filter: PaymentFilterTab) {
+    _paymentFilter.value = filter
   }
 
   fun selectEmployeeForDetail(item: EmployeeReportItem?) {
@@ -251,8 +258,9 @@ class ReportsViewModel(
     monthDataFlow,
     _searchQuery,
     _showOnlyWithMeals,
+    _paymentFilter,
     _selectedEmployeeDetail
-  ) { rawData, query, onlyWithMeals, selectedDetail ->
+  ) { rawData, query, onlyWithMeals, paymentFilterState, selectedDetail ->
     val formattedMonth = try {
       val ym = YearMonth.parse(rawData.month, MONTH_FORMAT)
       ym.format(DISPLAY_MONTH_FORMAT)
@@ -280,7 +288,13 @@ class ReportsViewModel(
         true
       }
 
-      matchesQuery && matchesMealFilter
+      val matchesPaymentFilter = when (paymentFilterState) {
+        PaymentFilterTab.ALL -> true
+        PaymentFilterTab.HAS_DUES -> item.pendingPaise > 0L
+        PaymentFilterTab.SETTLED -> item.paymentStatus == PaymentStatus.PAID || (item.paidPaise >= item.payablePaise && item.payablePaise > 0L)
+      }
+
+      matchesQuery && matchesMealFilter && matchesPaymentFilter
     }
 
     // Keep selected detail in sync if present
@@ -306,6 +320,7 @@ class ReportsViewModel(
       filteredEmployeeBills = filteredList,
       searchQuery = query,
       showOnlyWithMeals = onlyWithMeals,
+      paymentFilter = paymentFilterState,
       selectedEmployeeForDetail = currentDetail,
       isLoading = false
     )

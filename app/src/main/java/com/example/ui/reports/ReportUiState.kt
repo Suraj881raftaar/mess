@@ -10,6 +10,12 @@ enum class PaymentStatus {
   NO_DUES
 }
 
+enum class PaymentFilterTab(val label: String) {
+  ALL("All Staff"),
+  HAS_DUES("With Dues"),
+  SETTLED("Settled")
+}
+
 data class EmployeeReportItem(
   val employee: Employee,
   val breakfastCount: Int = 0,
@@ -42,6 +48,7 @@ data class ReportUiState(
   val filteredEmployeeBills: List<EmployeeReportItem> = emptyList(),
   val searchQuery: String = "",
   val showOnlyWithMeals: Boolean = false,
+  val paymentFilter: PaymentFilterTab = PaymentFilterTab.ALL,
   val selectedEmployeeForDetail: EmployeeReportItem? = null,
   val isLoading: Boolean = true
 )
