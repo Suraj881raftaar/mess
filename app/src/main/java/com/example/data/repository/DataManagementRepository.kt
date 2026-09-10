@@ -123,26 +123,7 @@ class DataManagementRepository(private val db: MessDatabase) {
     db.paymentDao().insertAll(payments)
 
     // 6. Insert Menu Templates
-    val templates = listOf(
-      MenuTemplate(
-        templateName = "North Indian Regular",
-        breakfast = "Poha, Boiled Eggs / Banana, Masala Chai",
-        lunch = "Dal Tadka, Seasonal Sabzi, Paneer, Jeera Rice, Phulka & Salad",
-        dinner = "Aloo Matar, Dal Makhani, Steamed Rice & Roti"
-      ),
-      MenuTemplate(
-        templateName = "South Indian Special",
-        breakfast = "Idli, Medu Vada, Coconut Chutney & Sambar",
-        lunch = "Avial, Sambar, Rasam, Beetroot Poriyal, Rice, Papad & Curd",
-        dinner = "Lemon Rice / Curd Rice with Potato Roast & Pickle"
-      ),
-      MenuTemplate(
-        templateName = "Weekend Feast",
-        breakfast = "Aloo Paratha, Fresh Curd, Pickle & Mint Tea",
-        lunch = "Paneer Biryani / Chicken Biryani, Mirchi Ka Salan, Raita & Gulab Jamun",
-        dinner = "Pav Bhaji, Pulao & Roasted Papad"
-      )
-    )
+    val templates = MenuRepository.getDefaultTemplates()
     db.menuTemplateDao().insertAll(templates)
   }
 }

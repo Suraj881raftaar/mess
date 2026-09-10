@@ -18,7 +18,9 @@ data class DailyMenuState(
   val isLoading: Boolean = false
 ) {
   val hasAnyMeal: Boolean
-    get() = breakfast != null || lunch != null || dinner != null
+    get() = (breakfast != null && breakfast.description.isNotBlank()) ||
+      (lunch != null && lunch.description.isNotBlank()) ||
+      (dinner != null && dinner.description.isNotBlank())
 }
 
 data class DayMenuItem(

@@ -21,6 +21,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.CalendarMonth
@@ -33,9 +35,11 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FreeBreakfast
 import androidx.compose.material.icons.filled.LunchDining
 import androidx.compose.material.icons.filled.RateReview
+import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.RestaurantMenu
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Today
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.ui.draw.clip
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -104,6 +108,10 @@ fun MenuScreen(
 
   var showTemplatesDialog by remember { mutableStateOf(false) }
   var showSaveTemplateDialog by remember { mutableStateOf(false) }
+  var showCustomTemplateDialog by remember { mutableStateOf(false) }
+  var templateToEdit by remember { mutableStateOf<MenuTemplate?>(null) }
+  var templateToDelete by remember { mutableStateOf<MenuTemplate?>(null) }
+  var showRestoreTemplatesConfirm by remember { mutableStateOf(false) }
   var showCopyWeekDialog by remember { mutableStateOf(false) }
   var feedbackMealTarget by remember { mutableStateOf<Pair<MealType, String?>?>(null) }
 
@@ -280,34 +288,302 @@ fun MenuScreen(
       onDismissRequest = { showSaveTemplateDialog = false },
       title = { Text("Save Menu as Template", fontWeight = FontWeight.Bold) },
       text = {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-          Text("Give a name for this day's menu template (e.g., 'North Indian Feast', 'South Indian Standard'):")
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+          if (!dailyState.hasAnyMeal) {
+            Card(
+              colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.errorContainer
+              ),
+              modifier = Modifier.fillMaxWidth()
+            ) {
+              Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                  Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                  Text(
+                    "No meals planned for ${dailyState.formattedDate}",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                    fontWeight = FontWeight.Bold
+                  )
+                }
+                Text(
+                  "You cannot save an empty day as a template. Please add dishes to this day first, or create a custom template directly.",
+                  style = MaterialTheme.typography.bodySmall,
+                  color = MaterialTheme.colorScheme.onErrorContainer
+                )
+              }
+            }
+          } else {
+            Text(
+              "Save meals from ${dailyState.formattedDate} as a reusable template:",
+              style = MaterialTheme.typography.bodyMedium
+            )
+            OutlinedTextField(
+              value = templateName,
+              onValueChange = { templateName = it },
+              label = { Text("Template Name (e.g. North Indian Feast)") },
+              singleLine = true,
+              modifier = Modifier
+                .fillMaxWidth()
+                .testTag("input_template_name")
+            )
+
+            // Preview of meals being saved
+            OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+              Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("Template Contents Preview:", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                Text(
+                  "☕ Breakfast: ${dailyState.breakfast?.description ?: "—"}",
+                  style = MaterialTheme.typography.bodySmall,
+                  color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                  "🍲 Lunch: ${dailyState.lunch?.description ?: "—"}",
+                  style = MaterialTheme.typography.bodySmall,
+                  color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                  "🌙 Dinner: ${dailyState.dinner?.description ?: "—"}",
+                  style = MaterialTheme.typography.bodySmall,
+                  color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+              }
+            }
+          }
+        }
+      },
+      confirmButton = {
+        if (dailyState.hasAnyMeal) {
+          Button(
+            onClick = {
+              if (templateName.isNotBlank()) {
+                viewModel.saveCurrentDayAsTemplate(templateName)
+                showSaveTemplateDialog = false
+              }
+            },
+            enabled = templateName.isNotBlank(),
+            modifier = Modifier.testTag("confirm_save_template_button")
+          ) {
+            Text("Save Template")
+          }
+        } else {
+          Button(
+            onClick = {
+              showSaveTemplateDialog = false
+              showCustomTemplateDialog = true
+            }
+          ) {
+            Text("Create Custom Template")
+          }
+        }
+      },
+      dismissButton = {
+        TextButton(onClick = { showSaveTemplateDialog = false }) {
+          Text("Cancel")
+        }
+      }
+    )
+  }
+
+  // Create Custom Template Dialog
+  if (showCustomTemplateDialog) {
+    var name by remember { mutableStateOf("") }
+    var breakfast by remember { mutableStateOf("") }
+    var lunch by remember { mutableStateOf("") }
+    var dinner by remember { mutableStateOf("") }
+
+    val isValid = name.isNotBlank() && (breakfast.isNotBlank() || lunch.isNotBlank() || dinner.isNotBlank())
+
+    AlertDialog(
+      onDismissRequest = { showCustomTemplateDialog = false },
+      title = { Text("Create Menu Template", fontWeight = FontWeight.Bold) },
+      text = {
+        Column(
+          modifier = Modifier.fillMaxWidth(),
+          verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
           OutlinedTextField(
-            value = templateName,
-            onValueChange = { templateName = it },
-            label = { Text("Template Name") },
+            value = name,
+            onValueChange = { name = it },
+            label = { Text("Template Name *") },
+            placeholder = { Text("e.g. South Indian Special") },
             singleLine = true,
-            modifier = Modifier
-              .fillMaxWidth()
-              .testTag("input_template_name")
+            modifier = Modifier.fillMaxWidth()
+          )
+          OutlinedTextField(
+            value = breakfast,
+            onValueChange = { breakfast = it },
+            label = { Text("Breakfast Menu") },
+            placeholder = { Text("e.g. Idli, Vada, Sambar & Tea") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+          )
+          OutlinedTextField(
+            value = lunch,
+            onValueChange = { lunch = it },
+            label = { Text("Lunch Menu") },
+            placeholder = { Text("e.g. Dal Tadka, Rice, Roti & Salad") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+          )
+          OutlinedTextField(
+            value = dinner,
+            onValueChange = { dinner = it },
+            label = { Text("Dinner Menu") },
+            placeholder = { Text("e.g. Paneer Bhurji, Phulka & Rice") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+          )
+          Text(
+            "* Specify at least one meal to save this template.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
           )
         }
       },
       confirmButton = {
         Button(
           onClick = {
-            if (templateName.isNotBlank()) {
-              viewModel.saveCurrentDayAsTemplate(templateName)
-              showSaveTemplateDialog = false
+            if (isValid) {
+              viewModel.createCustomTemplate(name, breakfast, lunch, dinner)
+              showCustomTemplateDialog = false
             }
           },
-          modifier = Modifier.testTag("confirm_save_template_button")
+          enabled = isValid
         ) {
-          Text("Save Template")
+          Text("Create Template")
         }
       },
       dismissButton = {
-        TextButton(onClick = { showSaveTemplateDialog = false }) {
+        TextButton(onClick = { showCustomTemplateDialog = false }) {
+          Text("Cancel")
+        }
+      }
+    )
+  }
+
+  // Edit Template Dialog
+  templateToEdit?.let { target ->
+    var name by remember(target.id) { mutableStateOf(target.templateName) }
+    var breakfast by remember(target.id) { mutableStateOf(target.breakfast ?: "") }
+    var lunch by remember(target.id) { mutableStateOf(target.lunch ?: "") }
+    var dinner by remember(target.id) { mutableStateOf(target.dinner ?: "") }
+
+    val isValid = name.isNotBlank() && (breakfast.isNotBlank() || lunch.isNotBlank() || dinner.isNotBlank())
+
+    AlertDialog(
+      onDismissRequest = { templateToEdit = null },
+      title = { Text("Edit Menu Template", fontWeight = FontWeight.Bold) },
+      text = {
+        Column(
+          modifier = Modifier.fillMaxWidth(),
+          verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+          OutlinedTextField(
+            value = name,
+            onValueChange = { name = it },
+            label = { Text("Template Name *") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+          )
+          OutlinedTextField(
+            value = breakfast,
+            onValueChange = { breakfast = it },
+            label = { Text("Breakfast Menu") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+          )
+          OutlinedTextField(
+            value = lunch,
+            onValueChange = { lunch = it },
+            label = { Text("Lunch Menu") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+          )
+          OutlinedTextField(
+            value = dinner,
+            onValueChange = { dinner = it },
+            label = { Text("Dinner Menu") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+          )
+          Text(
+            "* Specify at least one meal to save changes.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+          )
+        }
+      },
+      confirmButton = {
+        Button(
+          onClick = {
+            if (isValid) {
+              viewModel.updateTemplate(target.id, name, breakfast, lunch, dinner)
+              templateToEdit = null
+            }
+          },
+          enabled = isValid
+        ) {
+          Text("Save Changes")
+        }
+      },
+      dismissButton = {
+        TextButton(onClick = { templateToEdit = null }) {
+          Text("Cancel")
+        }
+      }
+    )
+  }
+
+  // Delete Template Confirmation Dialog
+  templateToDelete?.let { target ->
+    AlertDialog(
+      onDismissRequest = { templateToDelete = null },
+      title = { Text("Delete Template?", fontWeight = FontWeight.Bold) },
+      text = {
+        Text("Are you sure you want to delete template '${target.templateName}'?")
+      },
+      confirmButton = {
+        Button(
+          onClick = {
+            viewModel.deleteTemplate(target)
+            templateToDelete = null
+          },
+          colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+            containerColor = MaterialTheme.colorScheme.error
+          )
+        ) {
+          Text("Delete")
+        }
+      },
+      dismissButton = {
+        TextButton(onClick = { templateToDelete = null }) {
+          Text("Cancel")
+        }
+      }
+    )
+  }
+
+  // Restore Default Templates Confirmation Dialog
+  if (showRestoreTemplatesConfirm) {
+    AlertDialog(
+      onDismissRequest = { showRestoreTemplatesConfirm = false },
+      title = { Text("Restore Default Presets?", fontWeight = FontWeight.Bold) },
+      text = {
+        Text("This will load 7 curated standard meal presets (North Indian, South Indian, Weekend Feast, Light & Healthy, Punjabi Dhaba, Chinese, Quick Working Day) into your templates collection.")
+      },
+      confirmButton = {
+        Button(
+          onClick = {
+            viewModel.restoreDefaultTemplates()
+            showRestoreTemplatesConfirm = false
+          }
+        ) {
+          Text("Restore Presets")
+        }
+      },
+      dismissButton = {
+        TextButton(onClick = { showRestoreTemplatesConfirm = false }) {
           Text("Cancel")
         }
       }
@@ -324,57 +600,193 @@ fun MenuScreen(
           horizontalArrangement = Arrangement.SpaceBetween,
           verticalAlignment = Alignment.CenterVertically
         ) {
-          Text("Menu Templates", fontWeight = FontWeight.Bold)
-          IconButton(onClick = {
-            showTemplatesDialog = false
-            showSaveTemplateDialog = true
-          }) {
-            Icon(Icons.Default.BookmarkAdd, contentDescription = "Save Current as Template")
+          Text("Menu Templates (${templates.size})", fontWeight = FontWeight.Bold)
+          Row {
+            IconButton(
+              onClick = {
+                showCustomTemplateDialog = true
+              }
+            ) {
+              Icon(Icons.Default.Add, contentDescription = "New Custom Template")
+            }
+            IconButton(
+              onClick = {
+                showRestoreTemplatesConfirm = true
+              }
+            ) {
+              Icon(Icons.Default.RestartAlt, contentDescription = "Restore Default Presets")
+            }
           }
         }
       },
       text = {
-        if (templates.isEmpty()) {
-          Text("No templates saved yet. You can save any day's menu as a reusable template.")
-        } else {
-          LazyColumn(
+        Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+          // Quick actions row
+          Row(
             modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
           ) {
-            items(templates, key = { it.id }) { tpl ->
-              OutlinedCard(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(10.dp)) {
-                  Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                  ) {
-                    Text(
-                      text = tpl.templateName,
-                      style = MaterialTheme.typography.titleMedium,
-                      fontWeight = FontWeight.Bold
-                    )
-                    IconButton(
-                      onClick = { viewModel.deleteTemplate(tpl) },
-                      modifier = Modifier.size(24.dp)
+            OutlinedButton(
+              onClick = { showCustomTemplateDialog = true },
+              modifier = Modifier.weight(1f),
+              contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+            ) {
+              Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+              Spacer(modifier = Modifier.width(4.dp))
+              Text("New", style = MaterialTheme.typography.labelMedium)
+            }
+            OutlinedButton(
+              onClick = {
+                showSaveTemplateDialog = true
+              },
+              modifier = Modifier.weight(1.3f),
+              contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+            ) {
+              Icon(Icons.Default.BookmarkAdd, contentDescription = null, modifier = Modifier.size(16.dp))
+              Spacer(modifier = Modifier.width(4.dp))
+              Text("Save Current", style = MaterialTheme.typography.labelMedium)
+            }
+            OutlinedButton(
+              onClick = { showRestoreTemplatesConfirm = true },
+              modifier = Modifier.weight(1.3f),
+              contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+            ) {
+              Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp))
+              Spacer(modifier = Modifier.width(4.dp))
+              Text("Presets", style = MaterialTheme.typography.labelMedium)
+            }
+          }
+
+          if (templates.isEmpty()) {
+            Card(
+              modifier = Modifier.fillMaxWidth(),
+              colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+              Column(
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+              ) {
+                Icon(
+                  Icons.Default.Bookmark,
+                  contentDescription = null,
+                  modifier = Modifier.size(36.dp),
+                  tint = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                  "No templates saved yet",
+                  style = MaterialTheme.typography.titleSmall,
+                  fontWeight = FontWeight.Bold
+                )
+                Text(
+                  "Load standard mess presets to quickly plan meals with one tap.",
+                  style = MaterialTheme.typography.bodySmall,
+                  color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Button(
+                  onClick = { viewModel.restoreDefaultTemplates() }
+                ) {
+                  Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp))
+                  Spacer(modifier = Modifier.width(6.dp))
+                  Text("Load Standard Presets")
+                }
+              }
+            }
+          } else {
+            LazyColumn(
+              modifier = Modifier.fillMaxWidth(),
+              verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+              items(templates, key = { it.id }) { tpl ->
+                val hasAny = !tpl.breakfast.isNullOrBlank() || !tpl.lunch.isNullOrBlank() || !tpl.dinner.isNullOrBlank()
+
+                OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                  Column(modifier = Modifier.padding(12.dp)) {
+                    Row(
+                      modifier = Modifier.fillMaxWidth(),
+                      horizontalArrangement = Arrangement.SpaceBetween,
+                      verticalAlignment = Alignment.CenterVertically
                     ) {
-                      Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
+                      Text(
+                        text = tpl.templateName,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f)
+                      )
+                      Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(
+                          onClick = { templateToEdit = tpl },
+                          modifier = Modifier.size(28.dp)
+                        ) {
+                          Icon(
+                            Icons.Default.Edit,
+                            contentDescription = "Edit Template",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                          )
+                        }
+                        IconButton(
+                          onClick = { templateToDelete = tpl },
+                          modifier = Modifier.size(28.dp)
+                        ) {
+                          Icon(
+                            Icons.Default.Delete,
+                            contentDescription = "Delete Template",
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(18.dp)
+                          )
+                        }
+                      }
                     }
-                  }
-                  Text(
-                    text = "B: ${tpl.breakfast ?: "None"} | L: ${tpl.lunch ?: "None"} | D: ${tpl.dinner ?: "None"}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                  )
-                  Spacer(modifier = Modifier.height(6.dp))
-                  Button(
-                    onClick = {
-                      viewModel.applyTemplate(tpl.id)
-                      showTemplatesDialog = false
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                  ) {
-                    Text("Apply to Selected Date")
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    if (!hasAny) {
+                      Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                      ) {
+                        Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(14.dp))
+                        Text(
+                          "Empty template — tap Edit to add meals",
+                          style = MaterialTheme.typography.bodySmall,
+                          color = MaterialTheme.colorScheme.error
+                        )
+                      }
+                    } else {
+                      Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                          text = "☕ Breakfast: ${tpl.breakfast ?: "—"}",
+                          style = MaterialTheme.typography.bodySmall,
+                          color = if (tpl.breakfast.isNullOrBlank()) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                          text = "🍲 Lunch: ${tpl.lunch ?: "—"}",
+                          style = MaterialTheme.typography.bodySmall,
+                          color = if (tpl.lunch.isNullOrBlank()) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                          text = "🌙 Dinner: ${tpl.dinner ?: "—"}",
+                          style = MaterialTheme.typography.bodySmall,
+                          color = if (tpl.dinner.isNullOrBlank()) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onSurface
+                        )
+                      }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(
+                      onClick = {
+                        viewModel.applyTemplate(tpl.id)
+                        showTemplatesDialog = false
+                      },
+                      enabled = hasAny,
+                      modifier = Modifier.fillMaxWidth()
+                    ) {
+                      Text("Apply to ${dailyState.formattedDate}")
+                    }
                   }
                 }
               }

@@ -292,6 +292,50 @@ class MenuViewModel(
     }
   }
 
+  fun createCustomTemplate(
+    name: String,
+    breakfast: String?,
+    lunch: String?,
+    dinner: String?
+  ) {
+    viewModelScope.launch {
+      val res = menuRepository.saveAsTemplate(name, breakfast, lunch, dinner)
+      if (res.isSuccess) {
+        _userMessage.value = "Created template '$name' successfully!"
+      } else {
+        _userMessage.value = "Failed to create template: ${res.exceptionOrNull()?.message}"
+      }
+    }
+  }
+
+  fun updateTemplate(
+    templateId: Long,
+    name: String,
+    breakfast: String?,
+    lunch: String?,
+    dinner: String?
+  ) {
+    viewModelScope.launch {
+      val res = menuRepository.updateTemplate(templateId, name, breakfast, lunch, dinner)
+      if (res.isSuccess) {
+        _userMessage.value = "Template '$name' updated successfully!"
+      } else {
+        _userMessage.value = "Failed to update template: ${res.exceptionOrNull()?.message}"
+      }
+    }
+  }
+
+  fun restoreDefaultTemplates() {
+    viewModelScope.launch {
+      val res = menuRepository.restoreDefaultTemplates()
+      if (res.isSuccess) {
+        _userMessage.value = "Restored ${res.getOrDefault(0)} default menu presets!"
+      } else {
+        _userMessage.value = "Failed to restore default templates: ${res.exceptionOrNull()?.message}"
+      }
+    }
+  }
+
   suspend fun applyTemplateSync(templateId: Long): Result<Unit> {
     val res = menuRepository.applyTemplateToDate(templateId, _selectedDate.value)
     if (res.isSuccess) {

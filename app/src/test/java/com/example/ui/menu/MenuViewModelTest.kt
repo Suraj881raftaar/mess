@@ -249,4 +249,31 @@ class MenuViewModelTest {
     assertEquals("Thali", appliedState.lunch?.description)
     assertEquals("Khichdi", appliedState.dinner?.description)
   }
+
+  @Test
+  fun testEmptyDayCannotBeSavedAsTemplate() = runBlocking {
+    val emptyDate = "2026-09-20"
+    viewModel.setDate(emptyDate)
+    val res = viewModel.saveCurrentDayAsTemplateSync("Empty Template")
+    assertFalse(res.isSuccess)
+  }
+
+  @Test
+  fun testRestoreDefaultTemplatesAndEdit() = runBlocking {
+    val initial = viewModel.templates.value
+    assertTrue(initial.isEmpty())
+
+    viewModel.restoreDefaultTemplates()
+    val restored = viewModel.templates.first { it.isNotEmpty() }
+    assertEquals(7, restored.size)
+
+    // Edit the first template
+    val first = restored[0]
+    viewModel.updateTemplate(first.id, "North Indian Deluxe", "Stuffed Paratha", first.lunch, first.dinner)
+
+    val updatedList = viewModel.templates.first { list -> list.any { it.templateName == "North Indian Deluxe" } }
+    val updated = updatedList.first { it.id == first.id }
+    assertEquals("North Indian Deluxe", updated.templateName)
+    assertEquals("Stuffed Paratha", updated.breakfast)
+  }
 }
